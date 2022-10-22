@@ -30,7 +30,6 @@ FLAGS="-O2\
     "
 
 SRC="$(find "source/" -name "*.cpp")"
-GLUT="-lglu32 -mwindows glut64.lib -lopengl32"
 
 if [ ! -d target/ ]; then
     mkdir target
