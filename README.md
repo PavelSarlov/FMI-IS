@@ -1,2 +1,3 @@
 # FMI-IS
-FMI - Intelligent Systems (Data Mining)
+
+Materials, homeworks and stuff during the course.
