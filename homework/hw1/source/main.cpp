@@ -3,34 +3,61 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <exception>
 #include <iostream>
 #include <istream>
 #include <limits>
 #include <queue>
+#include <set>
 #include <stdexcept>
-#include <vector>
 
-using namespace std;
+typedef std::pair<int, int> coords;
 
-struct node {
-  int heuristic;
-  pair<int, int> zero;
-  vector<int> board;
-  string move;
+enum direction { null, up, right, down, left };
+static const char *direction_strings[] = {"null", "up", "right", "down",
+                                          "left"};
 
-  void print_board() {
-    int side = sqrt(board.size());
+bool move(std::vector<int> &board, direction move, int &zero_pos, int &side) {
 
-    for (size_t i = 0; i < board.size(); i++) {
-      cout << board[i] << ' ';
-      if (i % side == 0) {
-        cout << endl;
-      }
+  int zero_y = zero_pos / side;
+  int zero_x = zero_pos % side;
+
+  switch (move) {
+  case up:
+    if (zero_y >= side - 1) {
+      return false;
     }
+    std::swap(board[zero_pos], board[zero_pos + side]);
+    zero_pos += side;
+    break;
+  case down:
+    if (zero_y <= 0) {
+      return false;
+    }
+    std::swap(board[zero_pos], board[zero_pos - side]);
+    zero_pos -= side;
+    break;
+  case left:
+    if (zero_x >= side - 1) {
+      return false;
+    }
+    std::swap(board[zero_pos], board[zero_pos + 1]);
+    zero_pos += 1;
+    break;
+  case right:
+    if (zero_x <= 0) {
+      return false;
+    }
+    std::swap(board[zero_pos], board[zero_pos - 1]);
+    zero_pos -= 1;
+    break;
+  default:
+    break;
   }
-};
+  return true;
+}
 
-int manhattan(vector<int> board, int offset_after) {
+int manhattan(std::vector<int> &board, int &offset_after) {
   int dist = 0;
   int side = sqrt(board.size());
 
@@ -53,7 +80,7 @@ int manhattan(vector<int> board, int offset_after) {
   return dist;
 }
 
-bool is_solvable(vector<int> board) {
+bool is_solvable(std::vector<int> &board) {
   int inversions = 0;
   int side = sqrt(board.size());
   int blank = board.size() - 1;
@@ -76,127 +103,120 @@ bool is_solvable(vector<int> board) {
   return inversions & 1;
 }
 
-int id_search(deque<node> &path, int depth, int &bound, int &side,
-              int &offset_after) {
-  node top = path.back();
+int find_zero_pos(std::vector<int> &board) {
+  for (size_t i = 0; i < board.size(); i++) {
+    if (board[i] == 0) {
+      return i;
+    }
+  }
 
-  if (top.heuristic == 0) {
+  throw std::invalid_argument("No zero found");
+}
+
+int id_search(std::vector<int> &board, std::deque<direction> &path,
+              int &zero_pos, int depth, int &bound, int &side,
+              int &offset_after) {
+  direction last_move = path.back();
+
+  int heuristic = manhattan(board, offset_after);
+
+  if (heuristic == 0) {
     return -1;
   }
 
-  int cost = depth + top.heuristic;
+  int cost = depth + heuristic;
 
   if (cost > bound) {
     return cost;
   }
 
-  pair<int, int> zero = top.zero;
-  int zero_pos = zero.second * side + zero.first;
+  int min = std::numeric_limits<int>::max();
 
-  int min = numeric_limits<int>::max();
+  if (last_move != direction::right &&
+      move(board, direction::left, zero_pos, side)) {
+    path.push_back(direction::left);
 
-  if (zero.first < side - 1 && top.move != "right") {
-    vector<int> new_state(top.board.begin(), top.board.end());
-    swap(new_state[zero_pos], new_state[zero_pos + 1]);
+    int new_bound =
+        id_search(board, path, zero_pos, depth + 1, bound, side, offset_after);
 
-    node n = {manhattan(new_state, offset_after),
-              {zero.first + 1, zero.second},
-              new_state,
-              "left"};
-    path.push_back(n);
-
-    int new_bound = id_search(path, depth + 1, bound, side, offset_after);
     if (new_bound == -1) {
       return -1;
     }
+
     min = std::min(new_bound, min);
     path.pop_back();
+
+    move(board, direction::right, zero_pos, side);
   }
 
-  if (zero.first > 0 && top.move != "left") {
-    vector<int> new_state(top.board.begin(), top.board.end());
-    swap(new_state[zero_pos], new_state[zero_pos - 1]);
+  if (last_move != direction::left &&
+      move(board, direction::right, zero_pos, side)) {
+    path.push_back(direction::right);
 
-    node n = {manhattan(new_state, offset_after),
-              {zero.first - 1, zero.second},
-              new_state,
-              "right"};
-    path.push_back(n);
+    int new_bound =
+        id_search(board, path, zero_pos, depth + 1, bound, side, offset_after);
 
-    int new_bound = id_search(path, depth + 1, bound, side, offset_after);
     if (new_bound == -1) {
       return -1;
     }
+
     min = std::min(new_bound, min);
     path.pop_back();
+
+    move(board, direction::left, zero_pos, side);
   }
 
-  if (zero.second < side - 1 && top.move != "down") {
-    vector<int> new_state(top.board.begin(), top.board.end());
-    swap(new_state[zero_pos], new_state[zero_pos + side]);
+  if (last_move != direction::up &&
+      move(board, direction::down, zero_pos, side)) {
+    path.push_back(direction::down);
 
-    node n = {manhattan(new_state, offset_after),
-              {zero.first, zero.second + 1},
-              new_state,
-              "up"};
-    path.push_back(n);
+    int new_bound =
+        id_search(board, path, zero_pos, depth + 1, bound, side, offset_after);
 
-    int new_bound = id_search(path, depth + 1, bound, side, offset_after);
     if (new_bound == -1) {
       return -1;
     }
     min = std::min(new_bound, min);
     path.pop_back();
+
+    move(board, direction::up, zero_pos, side);
   }
 
-  if (zero.second > 0 && top.move != "up") {
-    vector<int> new_state(top.board.begin(), top.board.end());
-    swap(new_state[zero_pos], new_state[zero_pos - side]);
+  if (last_move != direction::down &&
+      move(board, direction::up, zero_pos, side)) {
+    path.push_back(direction::up);
 
-    node n = {manhattan(new_state, offset_after),
-              {zero.first, zero.second - 1},
-              new_state,
-              "down"};
-    path.push_back(n);
+    int new_bound =
+        id_search(board, path, zero_pos, depth + 1, bound, side, offset_after);
 
-    int new_bound = id_search(path, depth + 1, bound, side, offset_after);
     if (new_bound == -1) {
       return -1;
     }
     min = std::min(new_bound, min);
     path.pop_back();
+
+    move(board, direction::down, zero_pos, side);
   }
 
   return min;
 }
 
-int ida_star(vector<int> board, int offset_after, deque<node> &path) {
+int ida_star(std::vector<int> &board, int offset_after,
+             std::deque<direction> &path) {
   int side = sqrt(board.size());
+  int zero_pos = find_zero_pos(board);
 
-  pair<int, int> zero = {-1, -1};
-  for (size_t i = 0; i < board.size(); i++) {
-    if (board[i] == 0) {
-      zero = {i % side, i / side};
-    }
-  }
+  path.push_back(direction::null);
 
-  if (zero.first == -1) {
-    throw invalid_argument("No zero found");
-  }
-
-  path.push_back({manhattan(board, offset_after),
-                  zero,
-                  vector<int>(board.begin(), board.end()),
-                  {}});
-
-  int bound = path.back().heuristic;
+  int bound = manhattan(board, offset_after);
 
   while (true) {
-    int new_bound = id_search(path, 0, bound, side, offset_after);
+    int new_bound =
+        id_search(board, path, zero_pos, 0, bound, side, offset_after);
     if (new_bound == -1) {
       return 1;
     }
-    if (new_bound == numeric_limits<int>::max()) {
+    if (new_bound == std::numeric_limits<int>::max()) {
       return 0;
     }
     bound = new_bound;
@@ -209,40 +229,37 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     int numbers, empty_tile;
-    vector<int> board;
+    std::vector<int> board;
 
-    cin >> numbers >> empty_tile;
+    std::cin >> numbers;
 
     int tiles = numbers + 1;
     int side = sqrt(tiles);
 
     if (side * side != tiles) {
-      throw invalid_argument("Invalid number of tiles.");
+      throw std::invalid_argument("Invalid number of tiles.");
     }
+
+    std::cin >> empty_tile;
 
     if ((empty_tile != -1 && (empty_tile > numbers || empty_tile < 1))) {
-      throw invalid_argument("Invalid zero position. Valid are numbers in "
-                             "range 1 to 9 inclusive or -1 for default (9).");
+      char s[255];
+      snprintf(s, 255,
+               "Invalid zero position. Valid are numbers in range 1 to %d "
+               "inclusive or -1 for default (%d).",
+               tiles, tiles);
+      throw std::invalid_argument(s);
     }
 
-    board = vector<int>(tiles);
+    board = std::vector<int>(tiles);
 
+    bool offset = false;
     int offset_after = numbers;
+    std::set<int> check_set;
 
     for (int i = 0; i < tiles; i++) {
-      cin >> ws;
-
-      int c = cin.peek();
-
-      if (!isdigit(c)) {
-        string s;
-        cin >> s;
-        i--;
-        continue;
-      }
-
-      bool offset = false;
-      cin >> board[i];
+      std::cin >> std::ws;
+      std::cin >> board[i];
 
       int current_num = i + 1 - offset;
 
@@ -250,36 +267,47 @@ int main(int argc, char *argv[]) {
         offset = true;
         offset_after = i;
       }
+
+      check_set.insert(board[i]);
+    }
+
+    if (check_set.size() != (size_t)tiles) {
+      throw std::invalid_argument("Invalid board (dupicate numbers)");
+    }
+    for (int n : check_set) {
+      if (n < 0 || n >= tiles) {
+        throw std::invalid_argument("Invalid board (invalid numbers)");
+      }
     }
 
     if (!is_solvable(board)) {
-      throw invalid_argument("Not solvable.");
+      throw std::invalid_argument("Not solvable.");
     }
 
-    deque<node> path;
+    std::deque<direction> path;
 
-    auto start = chrono::system_clock::now();
+    auto start = std::chrono::system_clock::now();
 
     int result = ida_star(board, offset_after, path);
 
-    double total_millis = chrono::duration_cast<chrono::milliseconds>(
-                              chrono::system_clock::now() - start)
+    double total_millis = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::system_clock::now() - start)
                               .count();
-
-    printf("\n%.2f\n", total_millis / 1e3);
 
     if (result) {
       path.pop_front();
-      cout << path.size() << endl;
-      for (auto n : path) {
-        cout << n.move << endl;
+      std::cout << std::endl << path.size() << std::endl;
+      for (auto dir : path) {
+        std::cout << direction_strings[dir] << std::endl;
       }
     } else {
-      cout << "No solution found" << endl;
+      std::cout << "No solution found" << std::endl;
     }
 
-  } catch (exception &e) {
-    cout << e.what() << endl;
+    printf("\ntime: %.2f\n\n", total_millis / 1e3);
+
+  } catch (std::exception &e) {
+    std::cout << e.what() << std::endl;
   }
 
   system("pause");
