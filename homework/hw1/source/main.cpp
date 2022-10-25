@@ -310,7 +310,7 @@ int main(int argc, char *argv[]) {
     std::cout << e.what() << std::endl;
   }
 
-  system("pause");
+  int a = system("pause");
 
-  return 0;
+  return a;
 }
