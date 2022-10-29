@@ -253,21 +253,12 @@ int main(int argc, char *argv[]) {
 
     board = std::vector<int>(tiles);
 
-    bool offset = false;
-    int offset_after = numbers;
+    int offset_after = empty_tile != -1 ? empty_tile - 1 : numbers;
     std::set<int> check_set;
 
     for (int i = 0; i < tiles; i++) {
       std::cin >> std::ws;
       std::cin >> board[i];
-
-      int current_num = i + 1 - offset;
-
-      if (current_num == empty_tile) {
-        offset = true;
-        offset_after = i;
-      }
-
       check_set.insert(board[i]);
     }
 
