@@ -15,29 +15,21 @@ void print_board(std::vector<int> &nQueens) {
   std::cout << std::endl;
 }
 
-int attacks(int n) { return (1 + n) * n / 2; }
-
 int find_conflicts(int n, int row, int col, std::vector<int> &queensPerRow,
                    std::vector<int> &queensPerD1,
                    std::vector<int> &queensPerD2) {
   const int dOffset = n - 1;
 
-  return attacks(queensPerRow[row]) +
-         attacks(queensPerD1[col - row + dOffset]) +
-         attacks(queensPerD2[col + row]);
+  return queensPerRow[row] + queensPerD1[col - row + dOffset] +
+         queensPerD2[col + row];
 }
 
 bool has_conflicts(std::vector<int> &queensPerRow,
                    std::vector<int> &queensPerD1,
                    std::vector<int> &queensPerD2) {
-  for (auto x : queensPerRow) {
-    if (x > 1) {
-      return true;
-    }
-  }
-
   for (size_t i = 0; i < queensPerD1.size(); i++) {
-    if (queensPerD1[i] > 1 || queensPerD2[i] > 1) {
+    if (queensPerRow[i % queensPerRow.size()] > 1 || queensPerD1[i] > 1 ||
+        queensPerD2[i] > 1) {
       return true;
     }
   }
@@ -82,16 +74,16 @@ void init(std::vector<int> &nQueens, std::vector<int> &queensPerRow,
 
 int col_max_conflicts(std::vector<int> &nQueens, std::vector<int> &queensPerRow,
                       std::vector<int> &queensPerD1,
-                      std::vector<int> &queensPerD2, int *lastCol = nullptr) {
+                      std::vector<int> &queensPerD2) {
   const int n = nQueens.size();
 
   int maxConflicts = 0;
   std::vector<int> colList;
 
   for (int col = 0; col < n; col++) {
-    if (lastCol && col == *lastCol) {
-      continue;
-    }
+    /* if (lastCol && col == *lastCol) { */
+    /*   continue; */
+    /* } */
 
     int row = nQueens[col];
     int conflicts =
@@ -118,7 +110,7 @@ int row_min_conflicts(int col, std::vector<int> &nQueens,
   const int dOffset = n - 1;
 
   int lastRow = nQueens[col];
-  std::vector<int> rowList = {lastRow};
+  std::vector<int> rowList;
 
   queensPerRow[lastRow]--;
   queensPerD1[col - lastRow + dOffset]--;
@@ -128,10 +120,6 @@ int row_min_conflicts(int col, std::vector<int> &nQueens,
       find_conflicts(n, lastRow, col, queensPerRow, queensPerD1, queensPerD2);
 
   for (int row = 0; row < n; row++) {
-    if (row == lastRow) {
-      continue;
-    }
-
     int conflicts =
         find_conflicts(n, row, col, queensPerRow, queensPerD1, queensPerD2);
 
@@ -171,13 +159,9 @@ bool solve(int n, std::vector<int> &nQueens) {
       return true;
     }
 
-    int *lastCol = nullptr;
-
-    while (iter++ <= 10 * n) {
-      int col = col_max_conflicts(nQueens, queensPerRow, queensPerD1,
-                                  queensPerD2, lastCol);
-      delete lastCol;
-      lastCol = new int(col);
+    while (iter++ <= 0.1 * n) {
+      int col =
+          col_max_conflicts(nQueens, queensPerRow, queensPerD1, queensPerD2);
 
       int row = row_min_conflicts(col, nQueens, queensPerRow, queensPerD1,
                                   queensPerD2);
