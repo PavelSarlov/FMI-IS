@@ -1,9 +1,11 @@
-#include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <random>
 #include <set>
 #include <time.h>
 #include <vector>
+
+std::mt19937 mt(time(NULL));
 
 void print_board(std::vector<int> &nQueens) {
   for (size_t i = 0; i < nQueens.size(); i++) {
@@ -42,34 +44,51 @@ void init(std::vector<int> &nQueens, std::vector<int> &queensPerRow,
   const int n = nQueens.size();
   const int dOffset = n - 1;
 
-  nQueens[0] = rand() % n;
-  queensPerRow[nQueens[0]] = 1;
-  queensPerD1[-nQueens[0] + dOffset] = 1;
-  queensPerD2[nQueens[0]] = 1;
+  // horse distance
+  //
+  for (int row = 0, col = 1; row < n; row++) {
+    nQueens[col] = row;
+    queensPerRow[row]++;
+    queensPerD1[col - row + dOffset]++;
+    queensPerD2[col + row]++;
 
-  for (int col = 1; col < n; col++) {
-    int minConflicts = INT32_MAX;
-    std::vector<int> rowList;
-
-    for (int row = 0; row < n; row++) {
-      int conflicts =
-          find_conflicts(n, row, col, queensPerRow, queensPerD1, queensPerD2);
-
-      if (minConflicts > conflicts) {
-        minConflicts = conflicts;
-        rowList.clear();
-        rowList.push_back(row);
-      }
-      if (minConflicts == conflicts) {
-        rowList.push_back(row);
-      }
+    col += 2;
+    if (col >= n) {
+      col = 0;
     }
-
-    nQueens[col] = rowList[rand() % rowList.size()];
-    queensPerRow[nQueens[col]]++;
-    queensPerD1[col - nQueens[col] + dOffset]++;
-    queensPerD2[col + nQueens[col]]++;
   }
+
+  // greedy
+
+  /* nQueens[0] = mt() % n; */
+  /* queensPerRow[nQueens[0]] = 1; */
+  /* queensPerD1[-nQueens[0] + dOffset] = 1; */
+  /* queensPerD2[nQueens[0]] = 1; */
+
+  /* for (int col = 1; col < n; col++) { */
+  /*   int minConflicts = INT32_MAX; */
+  /*   std::vector<int> rowList; */
+
+  /*   for (int row = 0; row < n; row++) { */
+  /*     int conflicts = */
+  /*         find_conflicts(n, row, col, queensPerRow, queensPerD1,
+   * queensPerD2); */
+
+  /*     if (minConflicts > conflicts) { */
+  /*       minConflicts = conflicts; */
+  /*       rowList.clear(); */
+  /*       rowList.push_back(row); */
+  /*     } */
+  /*     if (minConflicts == conflicts) { */
+  /*       rowList.push_back(row); */
+  /*     } */
+  /*   } */
+
+  /*   nQueens[col] = rowList[mt() % rowList.size()]; */
+  /*   queensPerRow[nQueens[col]]++; */
+  /*   queensPerD1[col - nQueens[col] + dOffset]++; */
+  /*   queensPerD2[col + nQueens[col]]++; */
+  /* } */
 }
 
 int col_max_conflicts(std::vector<int> &nQueens, std::vector<int> &queensPerRow,
@@ -81,25 +100,24 @@ int col_max_conflicts(std::vector<int> &nQueens, std::vector<int> &queensPerRow,
   std::vector<int> colList;
 
   for (int col = 0; col < n; col++) {
-    /* if (lastCol && col == *lastCol) { */
-    /*   continue; */
-    /* } */
-
     int row = nQueens[col];
     int conflicts =
-        find_conflicts(n, row, col, queensPerRow, queensPerD1, queensPerD2);
+        find_conflicts(n, row, col, queensPerRow, queensPerD1, queensPerD2) - 3;
 
     if (maxConflicts < conflicts) {
       maxConflicts = conflicts;
       colList.clear();
       colList.push_back(col);
-    }
-    if (maxConflicts == conflicts) {
+    } else if (maxConflicts == conflicts) {
       colList.push_back(col);
     }
   }
 
-  return colList[rand() % colList.size()];
+  if (maxConflicts == 0) {
+    return -1;
+  }
+
+  return colList[mt() % colList.size()];
 }
 
 int row_min_conflicts(int col, std::vector<int> &nQueens,
@@ -127,13 +145,12 @@ int row_min_conflicts(int col, std::vector<int> &nQueens,
       minConflicts = conflicts;
       rowList.clear();
       rowList.push_back(row);
-    }
-    if (minConflicts == conflicts) {
+    } else if (minConflicts == conflicts) {
       rowList.push_back(row);
     }
   }
 
-  int minRow = rowList[rand() % rowList.size()];
+  int minRow = rowList[mt() % rowList.size()];
 
   queensPerRow[minRow]++;
   queensPerD1[col - minRow + dOffset]++;
@@ -142,7 +159,9 @@ int row_min_conflicts(int col, std::vector<int> &nQueens,
   return minRow;
 }
 
-bool solve(int n, std::vector<int> &nQueens) {
+bool solve(std::vector<int> &nQueens) {
+  int n = nQueens.size();
+
   if (n == 2 || n == 3) {
     return false;
   }
@@ -159,9 +178,13 @@ bool solve(int n, std::vector<int> &nQueens) {
       return true;
     }
 
-    while (iter++ <= 0.1 * n) {
+    while (iter++ <= 5 * n) {
       int col =
           col_max_conflicts(nQueens, queensPerRow, queensPerD1, queensPerD2);
+
+      if (col == -1) {
+        return true;
+      }
 
       int row = row_min_conflicts(col, nQueens, queensPerRow, queensPerD1,
                                   queensPerD2);
@@ -172,8 +195,6 @@ bool solve(int n, std::vector<int> &nQueens) {
 }
 
 int main() {
-  srand(time(NULL));
-
   int n = 0;
 
   std::cin >> n;
@@ -182,7 +203,7 @@ int main() {
 
   auto start = std::chrono::system_clock::now();
 
-  bool result = solve(n, nQueens);
+  bool result = solve(nQueens);
 
   double total_millis = std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::system_clock::now() - start)
