@@ -7,6 +7,13 @@
 
 std::mt19937 mt(time(NULL));
 
+void pause() {
+  std::cout << "Enter anything to continue..." << std::endl;
+  std::cin.clear();
+  char c;
+  std::cin >> c;
+}
+
 void print_board(std::vector<int> &nQueens) {
   for (size_t i = 0; i < nQueens.size(); i++) {
     for (size_t j = 0; j < nQueens.size(); j++) {
@@ -46,49 +53,48 @@ void init(std::vector<int> &nQueens, std::vector<int> &queensPerRow,
 
   // horse distance
   //
-  for (int row = 0, col = 1; row < n; row++) {
-    nQueens[col] = row;
-    queensPerRow[row]++;
-    queensPerD1[col - row + dOffset]++;
-    queensPerD2[col + row]++;
+  /* for (int row = 0, col = 1; row < n; row++) { */
+  /*   nQueens[col] = row; */
+  /*   queensPerRow[row]++; */
+  /*   queensPerD1[col - row + dOffset]++; */
+  /*   queensPerD2[col + row]++; */
 
-    col += 2;
-    if (col >= n) {
-      col = 0;
-    }
-  }
+  /*   col += 2; */
+  /*   if (col >= n) { */
+  /*     col = 0; */
+  /*   } */
+  /* } */
 
   // greedy
 
-  /* nQueens[0] = mt() % n; */
-  /* queensPerRow[nQueens[0]] = 1; */
-  /* queensPerD1[-nQueens[0] + dOffset] = 1; */
-  /* queensPerD2[nQueens[0]] = 1; */
+  nQueens[0] = mt() % n;
+  queensPerRow[nQueens[0]] = 1;
+  queensPerD1[-nQueens[0] + dOffset] = 1;
+  queensPerD2[nQueens[0]] = 1;
 
-  /* for (int col = 1; col < n; col++) { */
-  /*   int minConflicts = INT32_MAX; */
-  /*   std::vector<int> rowList; */
+  for (int col = 1; col < n; col++) {
+    int minConflicts = INT32_MAX;
+    std::vector<int> rowList;
 
-  /*   for (int row = 0; row < n; row++) { */
-  /*     int conflicts = */
-  /*         find_conflicts(n, row, col, queensPerRow, queensPerD1,
-   * queensPerD2); */
+    for (int row = 0; row < n; row++) {
+      int conflicts =
+          find_conflicts(n, row, col, queensPerRow, queensPerD1, queensPerD2);
 
-  /*     if (minConflicts > conflicts) { */
-  /*       minConflicts = conflicts; */
-  /*       rowList.clear(); */
-  /*       rowList.push_back(row); */
-  /*     } */
-  /*     if (minConflicts == conflicts) { */
-  /*       rowList.push_back(row); */
-  /*     } */
-  /*   } */
+      if (minConflicts > conflicts) {
+        minConflicts = conflicts;
+        rowList.clear();
+        rowList.push_back(row);
+      }
+      if (minConflicts == conflicts) {
+        rowList.push_back(row);
+      }
+    }
 
-  /*   nQueens[col] = rowList[mt() % rowList.size()]; */
-  /*   queensPerRow[nQueens[col]]++; */
-  /*   queensPerD1[col - nQueens[col] + dOffset]++; */
-  /*   queensPerD2[col + nQueens[col]]++; */
-  /* } */
+    nQueens[col] = rowList[mt() % rowList.size()];
+    queensPerRow[nQueens[col]]++;
+    queensPerD1[col - nQueens[col] + dOffset]++;
+    queensPerD2[col + nQueens[col]]++;
+  }
 }
 
 int col_max_conflicts(std::vector<int> &nQueens, std::vector<int> &queensPerRow,
@@ -212,10 +218,14 @@ int main() {
   if (result) {
     printf("\ntime: %.2f\n\n", total_millis / 1e3);
 
-    /* print_board(nQueens); */
+    if (n <= 20) {
+      print_board(nQueens);
+    }
   } else {
     printf("No solution found\n");
   }
+
+  pause();
 
   return 0;
 }
