@@ -216,7 +216,10 @@ public:
       if (urd_mutate(mt) < MUTATION_RATE) {
         std::pair<int, int> bounds = compute_bounds(n - 1);
 
-        std::swap(child.path[bounds.first], child.path[bounds.second]);
+        for (int i = 0; i <= (bounds.second - bounds.first) / 2; i++) {
+          std::swap(child.path[bounds.first + i],
+                    child.path[bounds.second - i]);
+        }
       }
     };
   }
