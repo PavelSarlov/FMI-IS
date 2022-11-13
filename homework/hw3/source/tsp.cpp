@@ -4,35 +4,26 @@
 #include <iostream>
 #include <map>
 #include <math.h>
+#include <queue>
 #include <random>
 #include <set>
 #include <vector>
+
+template <typename T> using vec = std::vector<T>;
 
 std::mt19937 mt(std::random_device{}());
 const double MAX = 2000;
 const double MIN = -2000;
 std::uniform_real_distribution<double> urd(MIN, MAX);
 
-struct town {
-  double x = 0, y = 0;
-  std::map<int, double> edges = {};
-  std::string name = "";
-
-  friend std::ostream &operator<<(std::ostream &os, const town &t) {
-    return (os << t.name << ' ' << t.x << ' ' << t.y);
-  }
-};
-
-template <typename T> using vec = std::vector<T>;
-using eval = std::pair<double, int>;
-
-template <typename T> void print(vec<T> v, bool nl = false) {
+template <typename T>
+void print(vec<T> v, bool nl = false, std::ostream &os = std::cout) {
   for (auto t : v) {
-    std::cout << t;
+    os << t;
     if (nl) {
-      std::cout << std::endl;
+      os << std::endl;
     } else {
-      std::cout << ' ';
+      os << ' ';
     }
   }
 }
@@ -53,6 +44,34 @@ template <typename T> vec<T> slice(vec<T> &p, int start, int end) {
   return merge(lower, upper);
 }
 
+struct town {
+  double x = 0, y = 0;
+  std::map<int, double> edges = {};
+  std::string name = "";
+
+  friend std::ostream &operator<<(std::ostream &os, const town &t) {
+    return (os << t.name << ' ' << t.x << ' ' << t.y);
+  }
+};
+
+struct chromosome {
+  vec<int> path = {};
+  double eval = INFINITY;
+
+  friend std::ostream &operator<<(std::ostream &os, const chromosome &c) {
+    print(c.path, 0, os);
+    return (os << " : " << c.eval);
+  }
+
+  friend bool operator<(const chromosome &c1, const chromosome &c2) {
+    return c1.eval < c2.eval;
+  };
+
+  friend bool operator>(const chromosome &c1, const chromosome &c2) {
+    return c1.eval > c2.eval;
+  };
+};
+
 vec<town> generate_towns(int n) {
   vec<town> towns(n);
   for (int i = 0; i < n; i++) {
@@ -68,28 +87,29 @@ vec<town> generate_towns(int n) {
   return towns;
 }
 
-vec<vec<int>> initialize(int n) {
-  vec<vec<int>> gen(n);
-  for (int i = 0; i < n; i++) {
+vec<chromosome> initialize(int gen_size, int n) {
+  vec<chromosome> gen(gen_size);
+  for (int i = 0; i < gen_size; i++) {
     vec<int> perm(n);
     std::iota(perm.begin(), perm.end(), 0);
     std::random_shuffle(perm.begin(), perm.end());
-    gen[i] = perm;
+    gen[i] = {perm};
   }
   return gen;
 }
 
-std::set<eval> evaluate(vec<town> &towns, vec<vec<int>> &gen) {
-  std::set<eval> result;
+void evaluate(vec<town> &towns, vec<chromosome> &gen) {
   for (size_t i = 0; i < gen.size(); i++) {
-    for (size_t j = 1; j < gen[i].size(); j++) {
-      if ((int)j - 1 != gen[i][j]) {
-        result.insert({towns[gen[i][j]].edges.at(j - 1), i});
+    double sum = 0;
+
+    for (size_t j = 1; j < gen[i].path.size(); j++) {
+      if ((int)j - 1 != gen[i].path[j]) {
+        sum += towns[gen[i].path[j]].edges.at(j - 1);
       }
     }
-  }
 
-  return result;
+    gen[i].eval = sum;
+  }
 }
 
 template <typename T> vec<T> top_k(vec<T> list) {
@@ -97,34 +117,50 @@ template <typename T> vec<T> top_k(vec<T> list) {
   slice(list, 0, 9);
 }
 
-/* vec<int> select_parents(vec<vec<int>> gen) {} */
+vec<int> select_parents(vec<chromosome> &gen) {
+  (void)gen;
+  return {};
+}
+
+vec<chromosome> reproduction(vec<chromosome> &generation, vec<int> &parents) {
+  (void)parents;
+  (void)generation;
+  return {};
+}
+
+void mutate() {}
 
 void tsp(vec<town> &towns) {
 
-  const int GEN_SIZE = towns.size() * towns.size() / 2;
+  const int GENERATION_SIZE = towns.size() * towns.size() / 2;
 
-  vec<vec<int>> gen = initialize(GEN_SIZE);
-  std::set<eval> gen_eval = evaluate(towns, gen);
+  vec<chromosome> generation = initialize(GENERATION_SIZE, towns.size());
+  evaluate(towns, generation);
+  std::priority_queue<chromosome, vec<chromosome>, std::greater<chromosome>> pq(
+      generation.begin(), generation.end());
 
-  std::cout << "gen first: " << gen_eval.begin()->first << std::endl;
+  std::cout << "gen first: " << pq.top() << std::endl;
 
   int max_iter = 1000;
   int iter = max_iter;
-  eval min = *gen_eval.begin();
+  chromosome min = pq.top();
 
   while (iter--) {
+    vec<int> parents = select_parents(generation);
+    vec<chromosome> children = reproduction(generation, parents);
 
-    if (gen_eval.begin()->first >= min.first) {
+    if (pq.top().eval >= min.eval) {
       break;
     }
 
+    min = pq.top();
+
     if (iter % (max_iter / 3) == 0) {
-      std::cout << "gen " << max_iter - iter << ": " << gen_eval.begin()->first
-                << std::endl;
+      std::cout << "gen " << max_iter - iter << ": " << min << std::endl;
     }
   }
 
-  std::cout << "gen last:" << min.first << std::endl;
+  std::cout << "gen last: " << min << std::endl;
 }
 
 void test_towns() {
