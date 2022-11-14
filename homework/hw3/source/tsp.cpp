@@ -23,10 +23,6 @@ void print(vec<T> v, bool nl = false, std::ostream &os = std::cout) {
   }
 }
 
-double distance(double x1, double y1, double x2, double y2) {
-  return sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
-}
-
 template <typename T> vec<T> merge(vec<T> &p1, vec<T> &p2) {
   vec<T> result(p1);
   result.insert(result.end(), p2.begin(), p2.end());
@@ -72,16 +68,13 @@ using pr_queue = std::priority_queue<T, vec<T>, std::greater<T>>;
 class GeneticTSP {
 private:
   std::mt19937 mt = std::mt19937(std::random_device{}());
-  const double MAX = 2000;
-  const double MIN = -2000;
-  std::uniform_real_distribution<double> urd_coord =
-      std::uniform_real_distribution<double>(MIN, MAX);
-
-  const double MUTATION_RATE = 0.1;
-  std::uniform_real_distribution<double> urd_mutate =
-      std::uniform_real_distribution<double>(0., 1.);
-
-  const int MAX_ITER = 10000;
+  const double XY_MAX = 2000;
+  const double XY_MIN = -2000;
+  const double MUTATION_RATE = 0.7;
+  const double ELITISM_RATE = 0.3;
+  const int MAX_GENERATIONS = 1000;
+  const int GENERATION_SIZE = 100;
+  const int TOURNAMENT_SIZE = 10;
 
   vec<town> _towns;
   vec<vec<double>> _distances;
@@ -95,19 +88,13 @@ private:
     return {lower, upper};
   }
 
-  template <typename T> vec<T> top_k(pr_queue<T> q, int k) {
-    vec<T> top(k);
+  template <typename T> vec<T> top_k(vec<T> v, int k) {
+    sort(v.begin(), v.end());
+    return vec<T>(v.begin(), v.begin() + k);
+  }
 
-    for (int i = 0; i < k; i++) {
-      if (q.empty()) {
-        break;
-      }
-
-      top[i] = q.top();
-      q.pop();
-    }
-
-    return top;
+  double distance(double x1, double y1, double x2, double y2) {
+    return sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
   }
 
   double total_distance(genome g) {
@@ -120,30 +107,9 @@ private:
     return sum;
   }
 
-public:
-  GeneticTSP(vec<town> towns, vec<vec<double>> distances) {
-    this->_towns = towns;
-    this->_distances = distances;
-  }
-
-  GeneticTSP(int n) {
-    this->_towns = vec<town>(n);
-    this->_distances = vec<vec<double>>(n, vec<double>(n, 0));
-
-    for (int i = 0; i < n; i++) {
-      _towns[i] = {urd_coord(mt), urd_coord(mt)};
-
-      for (int j = 0; j < i; j++) {
-        double dist =
-            distance(_towns[j].x, _towns[j].y, _towns[i].x, _towns[i].y);
-        _distances[i][j] = dist;
-        _distances[j][i] = dist;
-      }
-    }
-  }
-
-  vec<genome> initialize(int gen_size, int n) {
+  vec<genome> initialize(int gen_size) {
     vec<genome> gen(gen_size);
+    int n = _towns.size();
     for (int i = 0; i < gen_size; i++) {
       vec<int> perm(n);
       std::iota(perm.begin(), perm.end(), 0);
@@ -159,58 +125,55 @@ public:
     }
   }
 
-  vec<genome> select_parents(pr_queue<genome> &q, int k) {
-    vec<genome> top = top_k(q, k * 2);
-    std::shuffle(top.begin() + k / 2, top.begin() + k * 3 / 2, mt);
-    return vec<genome>(top.begin(), top.begin() + k);
+  vec<genome> select_parents(vec<genome> population) {
+    std::shuffle(population.begin(), population.end(), mt);
+    std::sort(population.begin(), population.begin() + TOURNAMENT_SIZE);
+
+    return vec<genome>(population.begin(), population.begin() + 2);
   }
 
   vec<genome> reproduction(vec<genome> &parents) {
-    vec<genome> children(parents.size());
 
-    auto crossover = [this](const genome &p1, const genome &p2) -> vec<genome> {
-      int n = p1.path.size();
-      vec<genome> cross = {{vec<int>(p1.path.begin(), p1.path.end())},
-                           {vec<int>(p2.path.begin(), p2.path.end())}};
+    genome p1 = parents[0];
+    genome p2 = parents[1];
+    int n = _towns.size();
 
-      std::pair<int, int> bounds = compute_bounds(n - 1);
-      vec<int> section1(p1.path.begin() + bounds.first,
-                        p1.path.begin() + bounds.second + 1);
-      vec<int> section2(p2.path.begin() + bounds.first,
-                        p2.path.begin() + bounds.second + 1);
+    vec<genome> children = {{vec<int>(p1.path.begin(), p1.path.end())},
+                            {vec<int>(p2.path.begin(), p2.path.end())}};
 
-      for (size_t i = 0; i < section1.size(); i++) {
-        auto it1 =
-            std::find(cross[0].path.begin(), cross[0].path.end(), section2[i]);
-        cross[0].path.erase(it1);
+    std::pair<int, int> bounds = compute_bounds(n - 1);
 
-        auto it2 =
-            std::find(cross[1].path.begin(), cross[1].path.end(), section1[i]);
-        cross[1].path.erase(it2);
-      }
+    vec<int> section1(p1.path.begin() + bounds.first,
+                      p1.path.begin() + bounds.second + 1);
+    vec<int> section2(p2.path.begin() + bounds.first,
+                      p2.path.begin() + bounds.second + 1);
 
-      std::shuffle(section1.begin(), section1.end(), mt);
-      std::shuffle(section2.begin(), section2.end(), mt);
+    for (size_t i = 0; i < section1.size(); i++) {
+      auto it1 = std::find(children[0].path.begin(), children[0].path.end(),
+                           section2[i]);
+      children[0].path.erase(it1);
 
-      cross[1].path.insert(cross[1].path.end(), section1.begin(),
-                           section1.end());
-      cross[0].path.insert(cross[0].path.end(), section2.begin(),
-                           section2.end());
-
-      return cross;
-    };
-
-    for (size_t i = 0; i < parents.size() - 1; i += 2) {
-      vec<genome> cross = crossover(parents[i], parents[i + 1]);
-      children[i] = cross[0];
-      children[i + 1] = cross[1];
+      auto it2 = std::find(children[1].path.begin(), children[1].path.end(),
+                           section1[i]);
+      children[1].path.erase(it2);
     }
+
+    std::shuffle(section1.begin(), section1.end(), mt);
+    std::shuffle(section2.begin(), section2.end(), mt);
+
+    children[1].path.insert(children[1].path.end(), section1.begin(),
+                            section1.end());
+    children[0].path.insert(children[0].path.end(), section2.begin(),
+                            section2.end());
 
     return children;
   }
 
   void mutate(vec<genome> &children) {
-    int n = children[0].path.size();
+    std::uniform_real_distribution<double> urd_mutate =
+        std::uniform_real_distribution<double>(0., 1.);
+
+    int n = _towns.size();
 
     for (auto &child : children) {
       if (urd_mutate(mt) < MUTATION_RATE) {
@@ -224,41 +187,75 @@ public:
     };
   }
 
+  void calculate_distances() {
+    _distances = vec<vec<double>>(_towns.size(), vec<double>(_towns.size(), 0));
+
+    for (size_t i = 0; i < _towns.size(); i++) {
+      for (size_t j = 0; j < i; j++) {
+        double dist =
+            distance(_towns[j].x, _towns[j].y, _towns[i].x, _towns[i].y);
+        _distances[i][j] = dist;
+        _distances[j][i] = dist;
+      }
+    }
+  }
+
+public:
+  GeneticTSP(vec<town> towns) {
+    _towns = towns;
+    calculate_distances();
+  }
+
+  GeneticTSP(int n = 10) {
+    std::uniform_real_distribution<double> urd_coord =
+        std::uniform_real_distribution<double>(XY_MIN, XY_MAX);
+
+    vec<town> towns(n);
+
+    for (int i = 0; i < n; i++) {
+      towns[i] = {urd_coord(mt), urd_coord(mt)};
+    }
+
+    _towns = towns;
+    calculate_distances();
+  }
+
   genome solve() {
+    const int elitism_offset = ELITISM_RATE * GENERATION_SIZE;
 
-    const int GENERATION_SIZE = _towns.size() * _towns.size() / 2;
-    const int PARENTS_SIZE = (GENERATION_SIZE / 3) & 1 ? GENERATION_SIZE / 3 + 1
-                                                       : GENERATION_SIZE / 3;
+    vec<genome> population = initialize(GENERATION_SIZE);
+    evaluate(population);
 
-    vec<genome> generation = initialize(GENERATION_SIZE, _towns.size());
-    evaluate(generation);
-    pr_queue<genome> pq(generation.begin(), generation.end());
+    genome min = *std::max_element(population.begin(), population.end());
 
-    std::cout << "gen first: " << pq.top() << std::endl;
+    std::cout << "gen null: " << min << std::endl;
 
-    int iter = MAX_ITER;
-    genome min = pq.top();
+    for (int i = 1; i < MAX_GENERATIONS; i++) {
 
-    while (--iter) {
+      vec<genome> new_population;
 
-      vec<genome> parents = select_parents(pq, PARENTS_SIZE);
-      vec<genome> children = reproduction(parents);
-
-      mutate(children);
-      evaluate(children);
-
-      for (auto &child : children) {
-        pq.push(child);
+      if (elitism_offset) {
+        new_population = top_k(population, elitism_offset);
       }
 
-      min = pq.top();
-      generation = top_k(pq, GENERATION_SIZE);
+      for (int j = elitism_offset; j < GENERATION_SIZE; j++) {
+        vec<genome> parents = select_parents(population);
+        vec<genome> children = reproduction(parents);
 
-      pq = pr_queue<genome>(generation.begin(), generation.end());
+        mutate(children);
+        evaluate(children);
 
-      if (iter % (MAX_ITER / 3) == 0) {
-        std::cout << "gen number " << MAX_ITER - iter << ": " << min
-                  << std::endl;
+        new_population.insert(new_population.end(), children.begin(),
+                              children.end());
+      }
+
+      population = new_population;
+
+      min = std::min(min,
+                     *std::max_element(population.begin(), population.end()));
+
+      if (i % (MAX_GENERATIONS / 3) == 0) {
+        std::cout << "gen " << i << ": " << min << std::endl;
       }
     }
 
@@ -285,8 +282,6 @@ void test_towns() {
 
   csv.close();
 
-  vec<vec<double>> distances(towns.size(), vec<double>(towns.size(), 0));
-
   csv.open("../UK_TSP/uk12_xy.csv");
 
   if (csv.is_open()) {
@@ -294,17 +289,12 @@ void test_towns() {
     for (size_t i = 0; i < towns.size(); i++) {
       std::getline(csv, line);
       sscanf(line.c_str(), "%lf,%lf", &towns[i].x, &towns[i].y);
-      for (size_t j = 0; j < i; j++) {
-        double dist = distance(towns[j].x, towns[j].y, towns[i].x, towns[i].y);
-        distances[i][j] = dist;
-        distances[j][i] = dist;
-      }
     }
   }
 
   csv.close();
 
-  genome result = GeneticTSP(towns, distances).solve();
+  genome result = GeneticTSP(towns).solve();
 
   std::cout << std::endl;
 
