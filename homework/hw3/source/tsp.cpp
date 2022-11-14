@@ -70,11 +70,11 @@ private:
   std::mt19937 mt = std::mt19937(std::random_device{}());
   const double XY_MAX = 2000;
   const double XY_MIN = -2000;
-  const double MUTATION_RATE = 0.7;
+  const double MUTATION_RATE = 0.8;
   const double ELITISM_RATE = 0.3;
   const int MAX_GENERATIONS = 1000;
   const int GENERATION_SIZE = 100;
-  const int TOURNAMENT_SIZE = 10;
+  const int TOURNAMENT_SIZE = 20;
 
   vec<town> _towns;
   vec<vec<double>> _distances;
@@ -221,7 +221,7 @@ public:
   }
 
   genome solve() {
-    const int elitism_offset = ELITISM_RATE * GENERATION_SIZE;
+    const int ELITISM_OFFSET = ELITISM_RATE * GENERATION_SIZE;
 
     vec<genome> population = initialize(GENERATION_SIZE);
     evaluate(population);
@@ -234,11 +234,11 @@ public:
 
       vec<genome> new_population;
 
-      if (elitism_offset) {
-        new_population = top_k(population, elitism_offset);
+      if (ELITISM_OFFSET) {
+        new_population = top_k(population, ELITISM_OFFSET);
       }
 
-      for (int j = elitism_offset; j < GENERATION_SIZE; j++) {
+      for (int j = ELITISM_OFFSET; j < GENERATION_SIZE; j++) {
         vec<genome> parents = select_parents(population);
         vec<genome> children = reproduction(parents);
 
@@ -249,7 +249,7 @@ public:
                               children.end());
       }
 
-      population = new_population;
+      population = top_k(new_population, GENERATION_SIZE);
 
       min = std::min(min,
                      *std::max_element(population.begin(), population.end()));
