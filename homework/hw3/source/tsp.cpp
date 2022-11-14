@@ -265,7 +265,7 @@ void test_towns() {
   std::ifstream csv;
   std::string name;
 
-  csv.open("../UK_TSP/uk12_name.csv");
+  csv.open("./UK_TSP/uk12_name.csv");
 
   if (csv.is_open()) {
     while (std::getline(csv, name)) {
@@ -275,7 +275,7 @@ void test_towns() {
 
   csv.close();
 
-  csv.open("../UK_TSP/uk12_xy.csv");
+  csv.open("./UK_TSP/uk12_xy.csv");
 
   if (csv.is_open()) {
     std::string line;
