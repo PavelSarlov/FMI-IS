@@ -60,6 +60,10 @@ struct genome {
   friend bool operator>(const genome &c1, const genome &c2) {
     return c1.eval > c2.eval;
   };
+
+  friend bool operator==(const genome &c1, const genome &c2) {
+    return c1.eval == c2.eval;
+  };
 };
 
 template <typename T>
@@ -71,7 +75,7 @@ private:
   const double XY_MAX = 2000;
   const double XY_MIN = -2000;
   const double MUTATION_RATE = 0.8;
-  const double ELITISM_RATE = 0.3;
+  const double ELITISM_RATE = 0.1;
   const int MAX_GENERATIONS = 1000;
   const int GENERATION_SIZE = 100;
   const int TOURNAMENT_SIZE = 20;
@@ -221,12 +225,13 @@ public:
   }
 
   genome solve() {
-    const int ELITISM_OFFSET = ELITISM_RATE * GENERATION_SIZE;
+    int elitism_rate_dynamic = ELITISM_RATE;
+    const int ELITISM_OFFSET = elitism_rate_dynamic * GENERATION_SIZE;
 
     vec<genome> population = initialize(GENERATION_SIZE);
     evaluate(population);
 
-    genome min = *std::max_element(population.begin(), population.end());
+    genome min = *std::min_element(population.begin(), population.end());
 
     std::cout << "gen null: " << min << std::endl;
 
@@ -249,10 +254,22 @@ public:
                               children.end());
       }
 
-      population = top_k(new_population, GENERATION_SIZE);
+      vec<genome> topk = top_k(new_population, GENERATION_SIZE);
 
-      min = std::min(min,
-                     *std::max_element(population.begin(), population.end()));
+      // covergence
+      if (population == topk) {
+        break;
+      }
+
+      population = topk;
+
+      if (population[0] == min) {
+        elitism_rate_dynamic /= 2;
+      } else {
+        elitism_rate_dynamic = ELITISM_RATE;
+      }
+
+      min = std::min(min, population[0]);
 
       if (i % (MAX_GENERATIONS / 3) == 0) {
         std::cout << "gen " << i << ": " << min << std::endl;
@@ -304,7 +321,7 @@ void test_towns() {
 }
 
 int main(int argc, char *argv[]) {
-  std::cout << std::setprecision(10);
+  std::cout << std::setprecision(16);
 
   try {
     if (argc > 1 && std::string(argv[1]) == "test") {
