@@ -64,10 +64,11 @@ struct genome {
   friend bool operator==(const genome &c1, const genome &c2) {
     return c1.eval == c2.eval;
   };
-};
 
-template <typename T>
-using pr_queue = std::priority_queue<T, vec<T>, std::greater<T>>;
+  friend bool operator>=(const genome &c1, const genome &c2) {
+    return c1.eval >= c2.eval;
+  };
+};
 
 class GeneticTSP {
 private:
@@ -76,9 +77,9 @@ private:
   const double XY_MIN = -2000;
   const double MUTATION_RATE = 0.8;
   const double ELITISM_RATE = 0.1;
-  const int MAX_GENERATIONS = 1000;
-  const int GENERATION_SIZE = 100;
-  const int TOURNAMENT_SIZE = 20;
+  const int MAX_GENERATIONS = 1500;
+  const int GENERATION_SIZE = 120;
+  const int TOURNAMENT_SIZE = 40;
 
   vec<town> _towns;
   vec<vec<double>> _distances;
@@ -94,7 +95,7 @@ private:
 
   template <typename T> vec<T> top_k(vec<T> v, int k) {
     sort(v.begin(), v.end());
-    return vec<T>(v.begin(), v.begin() + k);
+    return vec<T>(v.begin(), v.begin() + std::min(k, (int)v.size()));
   }
 
   double distance(double x1, double y1, double x2, double y2) {
@@ -183,10 +184,7 @@ private:
       if (urd_mutate(mt) < MUTATION_RATE) {
         std::pair<int, int> bounds = compute_bounds(n - 1);
 
-        for (int i = 0; i <= (bounds.second - bounds.first) / 2; i++) {
-          std::swap(child.path[bounds.first + i],
-                    child.path[bounds.second - i]);
-        }
+        std::swap(child.path[bounds.first], child.path[bounds.second]);
       }
     };
   }
@@ -263,7 +261,7 @@ public:
 
       population = topk;
 
-      if (population[0] == min) {
+      if (population[0] >= min) {
         elitism_rate_dynamic /= 2;
       } else {
         elitism_rate_dynamic = ELITISM_RATE;
@@ -289,7 +287,7 @@ void test_towns() {
   std::ifstream csv;
   std::string name;
 
-  csv.open("../UK_TSP/uk12_name.csv");
+  csv.open("./UK_TSP/uk12_name.csv");
 
   if (csv.is_open()) {
     while (std::getline(csv, name)) {
@@ -299,7 +297,7 @@ void test_towns() {
 
   csv.close();
 
-  csv.open("../UK_TSP/uk12_xy.csv");
+  csv.open("./UK_TSP/uk12_xy.csv");
 
   if (csv.is_open()) {
     std::string line;
