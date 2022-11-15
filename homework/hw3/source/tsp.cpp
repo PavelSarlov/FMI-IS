@@ -64,6 +64,10 @@ struct genome {
   friend bool operator==(const genome &c1, const genome &c2) {
     return c1.eval == c2.eval;
   };
+
+  friend bool operator>=(const genome &c1, const genome &c2) {
+    return c1.eval >= c2.eval;
+  };
 };
 
 class GeneticTSP {
@@ -72,9 +76,10 @@ private:
   const double XY_MAX = 2000;
   const double XY_MIN = -2000;
   const double MUTATION_RATE = 0.8;
-  const int MAX_GENERATIONS = 2000;
-  const int GENERATION_SIZE = 200;
-  const int PARENTS_SIZE = 40;
+  const double ELITISM_RATE = 0.1;
+  const int MAX_GENERATIONS = 1500;
+  const int GENERATION_SIZE = 120;
+  const int TOURNAMENT_SIZE = 40;
 
   vec<town> _towns;
   vec<vec<double>> _distances;
@@ -126,53 +131,45 @@ private:
   }
 
   vec<genome> select_parents(vec<genome> population) {
-    vec<genome> top = top_k(population, PARENTS_SIZE * 2);
-    std::shuffle(top.begin(), top.end(), mt);
-    return vec<genome>(top.begin(), top.begin() + PARENTS_SIZE);
+    std::shuffle(population.begin(), population.end(), mt);
+    std::sort(population.begin(), population.begin() + TOURNAMENT_SIZE);
+
+    return vec<genome>(population.begin(), population.begin() + 2);
   }
 
   vec<genome> reproduction(vec<genome> &parents) {
 
-    vec<genome> children(parents.size());
+    genome p1 = parents[0];
+    genome p2 = parents[1];
+    int n = _towns.size();
 
-    auto crossover = [this](const genome &p1, const genome &p2) -> vec<genome> {
-      int n = _towns.size();
+    vec<genome> children = {{vec<int>(p1.path.begin(), p1.path.end())},
+                            {vec<int>(p2.path.begin(), p2.path.end())}};
 
-      vec<genome> cross = {{vec<int>(p1.path.begin(), p1.path.end())},
-                           {vec<int>(p2.path.begin(), p2.path.end())}};
+    std::pair<int, int> bounds = compute_bounds(n - 1);
 
-      std::pair<int, int> bounds = compute_bounds(n - 1);
-      vec<int> section1(p1.path.begin() + bounds.first,
-                        p1.path.begin() + bounds.second + 1);
-      vec<int> section2(p2.path.begin() + bounds.first,
-                        p2.path.begin() + bounds.second + 1);
+    vec<int> section1(p1.path.begin() + bounds.first,
+                      p1.path.begin() + bounds.second + 1);
+    vec<int> section2(p2.path.begin() + bounds.first,
+                      p2.path.begin() + bounds.second + 1);
 
-      for (size_t i = 0; i < section1.size(); i++) {
-        auto it1 =
-            std::find(cross[0].path.begin(), cross[0].path.end(), section2[i]);
-        cross[0].path.erase(it1);
+    for (size_t i = 0; i < section1.size(); i++) {
+      auto it1 = std::find(children[0].path.begin(), children[0].path.end(),
+                           section2[i]);
+      children[0].path.erase(it1);
 
-        auto it2 =
-            std::find(cross[1].path.begin(), cross[1].path.end(), section1[i]);
-        cross[1].path.erase(it2);
-      }
-
-      std::shuffle(section1.begin(), section1.end(), mt);
-      std::shuffle(section2.begin(), section2.end(), mt);
-
-      cross[1].path.insert(cross[1].path.end(), section1.begin(),
-                           section1.end());
-      cross[0].path.insert(cross[0].path.end(), section2.begin(),
-                           section2.end());
-
-      return cross;
-    };
-
-    for (size_t i = 0; i < parents.size() - 1; i += 2) {
-      vec<genome> cross = crossover(parents[i], parents[i + 1]);
-      children[i] = cross[0];
-      children[i + 1] = cross[1];
+      auto it2 = std::find(children[1].path.begin(), children[1].path.end(),
+                           section1[i]);
+      children[1].path.erase(it2);
     }
+
+    std::shuffle(section1.begin(), section1.end(), mt);
+    std::shuffle(section2.begin(), section2.end(), mt);
+
+    children[1].path.insert(children[1].path.end(), section1.begin(),
+                            section1.end());
+    children[0].path.insert(children[0].path.end(), section2.begin(),
+                            section2.end());
 
     return children;
   }
@@ -226,6 +223,8 @@ public:
   }
 
   genome solve() {
+    int elitism_rate_dynamic = ELITISM_RATE;
+    const int ELITISM_OFFSET = elitism_rate_dynamic * GENERATION_SIZE;
 
     vec<genome> population = initialize(GENERATION_SIZE);
     evaluate(population);
@@ -235,21 +234,38 @@ public:
     std::cout << "gen null: " << min << std::endl;
 
     for (int i = 1; i < MAX_GENERATIONS; i++) {
-      vec<genome> parents = select_parents(population);
-      vec<genome> children = reproduction(parents);
 
-      mutate(children);
-      evaluate(children);
+      vec<genome> new_population;
 
-      population.insert(population.end(), children.begin(), children.end());
+      if (ELITISM_OFFSET) {
+        new_population = top_k(population, ELITISM_OFFSET);
+      }
 
-      vec<genome> topk = top_k(population, GENERATION_SIZE);
+      for (int j = ELITISM_OFFSET; j < GENERATION_SIZE; j++) {
+        vec<genome> parents = select_parents(population);
+        vec<genome> children = reproduction(parents);
 
+        mutate(children);
+        evaluate(children);
+
+        new_population.insert(new_population.end(), children.begin(),
+                              children.end());
+      }
+
+      vec<genome> topk = top_k(new_population, GENERATION_SIZE);
+
+      // covergence
       if (population == topk) {
         break;
       }
 
       population = topk;
+
+      if (population[0] >= min) {
+        elitism_rate_dynamic /= 2;
+      } else {
+        elitism_rate_dynamic = ELITISM_RATE;
+      }
 
       min = std::min(min, population[0]);
 
