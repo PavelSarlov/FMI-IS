@@ -269,7 +269,7 @@ public:
 
       min = std::min(min, population[0]);
 
-      if (i % (MAX_GENERATIONS / 3) == 0) {
+      if (i % (MAX_GENERATIONS / 4) == 0) {
         std::cout << "gen " << i << ": " << min << std::endl;
       }
     }
