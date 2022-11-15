@@ -60,6 +60,10 @@ struct genome {
   friend bool operator>(const genome &c1, const genome &c2) {
     return c1.eval > c2.eval;
   };
+
+  friend bool operator==(const genome &c1, const genome &c2) {
+    return c1.eval == c2.eval;
+  };
 };
 
 class GeneticTSP {
@@ -68,9 +72,9 @@ private:
   const double XY_MAX = 2000;
   const double XY_MIN = -2000;
   const double MUTATION_RATE = 0.8;
-  const int MAX_GENERATIONS = 5000;
-  const int GENERATION_SIZE = 100;
-  const int PARENTS_SIZE = 20;
+  const int MAX_GENERATIONS = 2000;
+  const int GENERATION_SIZE = 200;
+  const int PARENTS_SIZE = 40;
 
   vec<town> _towns;
   vec<vec<double>> _distances;
@@ -183,10 +187,7 @@ private:
       if (urd_mutate(mt) < MUTATION_RATE) {
         std::pair<int, int> bounds = compute_bounds(n - 1);
 
-        for (int i = 0; i <= (bounds.second - bounds.first) / 2; i++) {
-          std::swap(child.path[bounds.first + i],
-                    child.path[bounds.second - i]);
-        }
+        std::swap(child.path[bounds.first], child.path[bounds.second]);
       }
     };
   }
@@ -229,7 +230,7 @@ public:
     vec<genome> population = initialize(GENERATION_SIZE);
     evaluate(population);
 
-    genome min = *std::max_element(population.begin(), population.end());
+    genome min = *std::min_element(population.begin(), population.end());
 
     std::cout << "gen null: " << min << std::endl;
 
@@ -242,10 +243,15 @@ public:
 
       population.insert(population.end(), children.begin(), children.end());
 
-      population = top_k(population, GENERATION_SIZE);
+      vec<genome> topk = top_k(population, GENERATION_SIZE);
 
-      min = std::min(min,
-                     *std::max_element(population.begin(), population.end()));
+      if (population == topk) {
+        break;
+      }
+
+      population = topk;
+
+      min = std::min(min, population[0]);
 
       if (i % (MAX_GENERATIONS / 3) == 0) {
         std::cout << "gen " << i << ": " << min << std::endl;
@@ -297,7 +303,7 @@ void test_towns() {
 }
 
 int main(int argc, char *argv[]) {
-  std::cout << std::setprecision(10);
+  std::cout << std::setprecision(16);
 
   try {
     if (argc > 1 && std::string(argv[1]) == "test") {
