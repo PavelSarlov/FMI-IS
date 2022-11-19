@@ -84,7 +84,8 @@ class TicTacToe {
     for (int i = 0; i < 9; i++) {
       if (_state[i] == empty) {
         _state[i] = _computer_symbol;
-        int min = _min(depth + 1).value;
+        int min = _min(depth + 1, alpha, beta).value;
+        _state[i] = empty;
         if (max.value < min) {
           max = {min, i};
         }
@@ -92,7 +93,6 @@ class TicTacToe {
           return max;
         }
         alpha = std::max(alpha, max.value);
-        _state[i] = empty;
       }
     }
 
@@ -112,7 +112,8 @@ class TicTacToe {
     for (int i = 0; i < 9; i++) {
       if (_state[i] == empty) {
         _state[i] = _player_symbol;
-        int max = _max(depth + 1).value;
+        int max = _max(depth + 1, alpha, beta).value;
+        _state[i] = empty;
         if (min.value > max) {
           min = {max, i};
         }
@@ -120,7 +121,6 @@ class TicTacToe {
           return min;
         }
         beta = std::min(beta, min.value);
-        _state[i] = empty;
       }
     }
 
