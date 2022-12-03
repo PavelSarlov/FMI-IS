@@ -103,7 +103,8 @@ class naive_bayes_classifier {
       classes_counts[dataset[i][0]]++;
     }
     for (int i = 0; i < _classes_probs.size(); i++) {
-      _classes_probs[i] = (double)classes_counts[i] / dataset.size();
+      _classes_probs[i] = ((double)classes_counts[i] + LAMBDA) /
+                          (dataset.size() + _classes_probs.size() * LAMBDA);
     }
 
     vector<vector<vector<int>>> features_counts(
@@ -120,7 +121,8 @@ class naive_bayes_classifier {
       for (int j = 0; j < _features_probs[i].size(); j++) {
         for (int k = 0; k < _features_probs[i][j].size(); k++) {
           _features_probs[i][j][k] =
-              (double)features_counts[i][j][k] / classes_counts[j];
+              ((double)features_counts[i][j][k] + LAMBDA) /
+              (classes_counts[k] + _features_probs.size() * LAMBDA);
         }
       }
     }
