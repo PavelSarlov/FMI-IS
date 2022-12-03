@@ -1,0 +1,13 @@
+clang
+%h -x c++-header
+%cpp -std=c++17
+%c -std=c17
+-Wall
+-Wno-narrowing
+-Wno-unused-result
+-Werror
+-Wshadow
+-pedantic
+-Wextra
+-I./include
+
