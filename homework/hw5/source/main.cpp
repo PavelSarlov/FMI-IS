@@ -96,27 +96,76 @@ class naive_bayes_classifier {
     cout << "Values per feature: " << _value_to_idx.size() << endl << endl;
   }
 
-  void _train_batch(vector<vector<int>> dataset) {
-    vector<int> classes_counts(_classes_probs.size(), 0);
+  vector<vector<vector<int>>> _prepare_data() {
+    random_shuffle(_dataset.begin(), _dataset.end());
+
+    vector<vector<vector<int>>> preparation(_N_FOLD);
+    vector<vector<vector<int>>> classes(_class_to_idx.size());
+    vector<int> classes_counts = _get_classes_counts(_dataset);
+    double total_sample_size = (double)_dataset.size() / _N_FOLD;
+
+    for (int i = 0; i < _dataset.size(); i++) {
+      classes[_dataset[i][0]].push_back(_dataset[i]);
+    }
+
+    for (auto &c : classes) {
+      random_shuffle(c.begin(), c.end());
+    }
+
+    for (int i = 0; i < classes_counts.size(); i++) {
+      classes_counts[i] =
+          total_sample_size / _dataset.size() * classes_counts[i];
+    }
+
+    for (int i = 0; i < _N_FOLD; i++) {
+      vector<int> cur_classes_counts = classes_counts;
+
+      for (int j = 0; j < cur_classes_counts.size() && classes[j].size(); j++) {
+        while (cur_classes_counts[j]--) {
+          preparation[i].push_back(classes[j].back());
+          classes[j].pop_back();
+        }
+      }
+    }
+
+    return preparation;
+  }
+
+  vector<int> _get_classes_counts(vector<vector<int>> dataset) {
+    vector<int> classes_counts(_class_to_idx.size(), 0);
 
     for (int i = 0; i < dataset.size(); i++) {
       classes_counts[dataset[i][0]]++;
     }
-    for (int i = 0; i < _classes_probs.size(); i++) {
-      _classes_probs[i] = ((double)classes_counts[i] + LAMBDA) /
-                          (dataset.size() + _classes_probs.size() * LAMBDA);
-    }
 
+    return classes_counts;
+  }
+
+  vector<vector<vector<int>>>
+  _get_features_counts(vector<vector<int>> dataset) {
     vector<vector<vector<int>>> features_counts(
         _features_count,
         vector<vector<int>>(_value_to_idx.size(),
-                            vector<int>(classes_counts.size(), 0)));
+                            vector<int>(_classes_probs.size(), 0)));
 
     for (int i = 0; i < dataset.size(); i++) {
       for (int j = 0; j < _features_count; j++) {
         features_counts[j][dataset[i][j + 1]][dataset[i][0]]++;
       }
     }
+
+    return features_counts;
+  }
+
+  void _train_batch(vector<vector<int>> dataset) {
+    vector<int> classes_counts(_classes_probs.size(), 0);
+    vector<vector<vector<int>>> features_counts = _get_features_counts(dataset);
+
+    for (int i = 0; i < _classes_probs.size(); i++) {
+      _classes_probs[i] = ((double)classes_counts[i] + LAMBDA) /
+                          (dataset.size() + _classes_probs.size() * LAMBDA);
+    }
+
     for (int i = 0; i < _features_probs.size(); i++) {
       for (int j = 0; j < _features_probs[i].size(); j++) {
         for (int k = 0; k < _features_probs[i][j].size(); k++) {
@@ -173,25 +222,23 @@ public:
   }
 
   void cross_validate() {
-    const int SET_SIZE = _dataset.size() / _N_FOLD;
-
     double overall_accuracy = 0;
 
+    vector<vector<vector<int>>> prepared_data = _prepare_data();
+
     for (int i = 0; i < _N_FOLD; i++) {
-      vector<vector<int>> train_set(
-          _dataset.begin(),
-          _dataset.begin() + min(i * SET_SIZE, (int)_dataset.size()));
+      vector<vector<vector<int>>> train_set(prepared_data.begin(),
+                                            prepared_data.begin() + i);
       train_set.insert(train_set.end(),
-                       _dataset.begin() +
-                           min((i + 1) * SET_SIZE, (int)_dataset.size()),
-                       _dataset.end());
-      vector<vector<int>> predict_set(
-          _dataset.begin() + min(i * SET_SIZE, (int)_dataset.size()),
-          _dataset.begin() + min((i + 1) * SET_SIZE, (int)_dataset.size()));
+                       prepared_data.begin() +
+                           min((i + 1), (int)prepared_data.size()),
+                       prepared_data.end());
 
-      _train_batch(train_set);
+      for (auto &batch : train_set) {
+        _train_batch(batch);
+      }
 
-      double accuracy = _predict_batch(predict_set);
+      double accuracy = _predict_batch(prepared_data[i]);
 
       cout << "Set " << i + 1 << " Accuracy: " << accuracy << endl;
 
