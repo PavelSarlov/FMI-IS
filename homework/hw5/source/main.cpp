@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <exception>
 #include <fstream>
@@ -6,6 +7,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -97,7 +99,10 @@ class naive_bayes_classifier {
   }
 
   vector<vector<vector<int>>> _prepare_data() {
-    random_shuffle(_dataset.begin(), _dataset.end());
+    const unsigned seed =
+        chrono::system_clock::now().time_since_epoch().count();
+
+    shuffle(_dataset.begin(), _dataset.end(), default_random_engine(seed));
 
     vector<vector<vector<int>>> preparation(_N_FOLD);
     vector<vector<vector<int>>> classes(_class_to_idx.size());
@@ -109,7 +114,7 @@ class naive_bayes_classifier {
     }
 
     for (auto &c : classes) {
-      random_shuffle(c.begin(), c.end());
+      shuffle(c.begin(), c.end(), default_random_engine(seed));
     }
 
     for (int i = 0; i < classes_counts.size(); i++) {
@@ -261,6 +266,8 @@ int main() {
   } catch (exception &e) {
     cout << e.what() << endl;
   }
+
+  system("pause");
 
   return 0;
 }
