@@ -29,8 +29,8 @@ class decision_tree {
   vector<map<int, string>> _idx_to_value;
 
   vector<vector<int>> _dataset;
-  vector<double> _classes_probs;
-  vector<vector<vector<double>>> _features_probs;
+  vector<int> _classes_counts;
+  vector<vector<vector<int>>> _values_counts;
 
   vector<string> _split(string text, string delim) {
     auto start = 0;
@@ -48,11 +48,14 @@ class decision_tree {
     return result;
   }
 
-  void _init_probs() {
-    _classes_probs = vector<double>(_class_to_idx.size());
-    _features_probs = vector<vector<vector<double>>>(
-        _value_to_idx.size(),
-        vector<vector<double>>(_value_to_idx.size(), _classes_probs));
+  void _reset_counts() {
+    _classes_counts = vector<int>(_class_to_idx.size());
+    _values_counts = vector<vector<vector<int>>>(_value_to_idx.size());
+
+    for (int i = 0; i < _value_to_idx.size(); i++) {
+      _values_counts[i] =
+          vector<vector<int>>(_value_to_idx[i].size(), _classes_counts);
+    }
   }
 
   void _parse_dataset(vector<vector<string>> &data) {
@@ -78,7 +81,7 @@ class decision_tree {
       }
     }
 
-    _init_probs();
+    _reset_counts();
 
     cout << "Classes: " << _class_to_idx.size() << endl;
     cout << "Features: " << _value_to_idx.size() << endl;
@@ -158,7 +161,9 @@ class decision_tree {
     return -result;
   }
 
-  double _gain(vector<vector<int>> sample) { return 0; }
+  double _gain(vector<vector<int>> sample, int feature) { return 0; }
+
+  void _train_batch(vector<vector<int>> batch) {}
 
 public:
   decision_tree(string path) {
