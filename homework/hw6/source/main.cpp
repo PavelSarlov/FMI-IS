@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <fstream>
 #include <iostream>
@@ -131,12 +132,87 @@ class decision_tree {
     return preparation;
   }
 
+  vector<vector<int>> _get_feature_value_sample(vector<vector<int>> sample,
+                                                int feature, int value) {
+    vector<vector<int>> result;
+
+    for (auto &s : sample) {
+      if (s[feature] == value) {
+        result.push_back(s);
+      }
+    }
+
+    return result;
+  }
+
+  double _entropy(vector<vector<int>> sample) {
+    vector<int> classes_counts = _get_classes_counts(sample);
+
+    double result = 0;
+
+    for (int i = 0; i < classes_counts.size(); i++) {
+      double p = (double)classes_counts[i] / sample.size();
+      result += p * log2(p);
+    }
+
+    return -result;
+  }
+
+  double _gain(vector<vector<int>> sample) { return 0; }
+
 public:
+  decision_tree(string path) {
+    ifstream file(path);
+
+    vector<vector<string>> raw_data;
+
+    if (file.is_open()) {
+      string line;
+      while (getline(file, line)) {
+        raw_data.push_back(_split(line, ","));
+      }
+    }
+
+    file.close();
+
+    cout << "Data size: " << raw_data.size() << endl;
+    _parse_dataset(raw_data);
+  }
+
+  void cross_validate() {
+    double overall_accuracy = 0;
+
+    vector<vector<vector<int>>> prepared_data = _prepare_data();
+
+    for (int i = 0; i < _N_FOLD; i++) {
+      vector<vector<vector<int>>> train_set(prepared_data.begin(),
+                                            prepared_data.begin() + i);
+
+      train_set.insert(train_set.end(),
+                       prepared_data.begin() +
+                           min((i + 1), (int)prepared_data.size()),
+                       prepared_data.end());
+
+      /* for (auto &batch : train_set) { */
+      /*   _train_batch(batch); */
+      /* } */
+
+      /* double accuracy = _predict_batch(prepared_data[i]); */
+
+      /* cout << "Set " << i + 1 << " Accuracy: " << accuracy << endl; */
+
+      /* overall_accuracy += accuracy; */
+
+      _init_probs();
+    }
+
+    cout << "Avg. Accuracy: " << overall_accuracy / _N_FOLD << endl;
+  }
 };
 
 int main() {
   try {
-    auto dt = decision_tree();
+    auto dt = decision_tree("./breast-cancer.data");
 
   } catch (exception &e) {
     cout << e.what() << endl;
