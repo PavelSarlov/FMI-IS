@@ -1,10 +1,13 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <exception>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
+#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
@@ -19,7 +22,19 @@ template <typename T> ostream &operator<<(ostream &os, const vector<T> &v) {
   return os;
 }
 
+template <typename U, typename V>
+ostream &operator<<(ostream &os, const pair<U, V> &p) {
+  os << p.first << ' ' << p.second << endl;
+  return os;
+}
+
 class decision_tree {
+  struct node {
+    int feature;
+    vector<node> children;
+    int class_result = -1;
+  };
+
   const int _N_FOLD = 10;
 
   map<string, int> _class_to_idx;
@@ -31,6 +46,15 @@ class decision_tree {
   vector<vector<int>> _dataset;
   vector<int> _classes_counts;
   vector<vector<vector<int>>> _values_counts;
+
+  node _root;
+
+  template <typename T> T _flatten(vector<T> arr) {
+    return accumulate(arr.begin(), arr.end(), T{}, [](auto &dest, auto &src) {
+      dest.insert(dest.end(), src.begin(), src.end());
+      return dest;
+    });
+  }
 
   vector<string> _split(string text, string delim) {
     auto start = 0;
@@ -53,8 +77,8 @@ class decision_tree {
     _values_counts = vector<vector<vector<int>>>(_value_to_idx.size());
 
     for (int i = 0; i < _value_to_idx.size(); i++) {
-      _values_counts[i] =
-          vector<vector<int>>(_value_to_idx[i].size(), _classes_counts);
+      _values_counts[i] = vector<vector<int>>(_value_to_idx[i].size(),
+                                              vector<int>(_classes_counts));
     }
   }
 
@@ -74,8 +98,8 @@ class decision_tree {
 
       for (size_t j = 1; j < data[i].size(); j++) {
 
-        _idx_to_value[j - 1].insert({_value_to_idx.size(), data[i][j]});
-        _value_to_idx[j - 1].insert({data[i][j], _value_to_idx.size()});
+        _idx_to_value[j - 1].insert({_value_to_idx[j - 1].size(), data[i][j]});
+        _value_to_idx[j - 1].insert({data[i][j], _value_to_idx[j - 1].size()});
 
         _dataset[i][j] = _value_to_idx[j - 1].at(data[i][j]);
       }
@@ -135,12 +159,12 @@ class decision_tree {
     return preparation;
   }
 
-  vector<vector<int>> _get_feature_value_sample(vector<vector<int>> sample,
+  vector<vector<int>> _get_feature_value_sample(vector<vector<int>> &sample,
                                                 int feature, int value) {
     vector<vector<int>> result;
 
     for (auto &s : sample) {
-      if (s[feature] == value) {
+      if (s[feature + 1] == value) {
         result.push_back(s);
       }
     }
@@ -148,22 +172,116 @@ class decision_tree {
     return result;
   }
 
-  double _entropy(vector<vector<int>> sample) {
-    vector<int> classes_counts = _get_classes_counts(sample);
+  void _calculate_counts(vector<vector<int>> sample) {
+    _reset_counts();
 
+    for (int i = 0; i < sample.size(); i++) {
+      _classes_counts[sample[i][0]]++;
+
+      for (int j = 1; j < sample[i].size(); j++) {
+        _values_counts[j - 1][sample[i][j]][sample[i][0]]++;
+      }
+    }
+  }
+
+  double _entropy(vector<int> counts) {
+    int total = accumulate(counts.begin(), counts.end(), 0);
     double result = 0;
 
-    for (int i = 0; i < classes_counts.size(); i++) {
-      double p = (double)classes_counts[i] / sample.size();
-      result += p * log2(p);
+    for (int i = 0; i < counts.size(); i++) {
+      double p = (double)counts[i] / total;
+      result += p ? p * log2(p) : 0;
     }
 
     return -result;
   }
 
-  double _gain(vector<vector<int>> sample, int feature) { return 0; }
+  double _gain(vector<int> classes_counts, vector<vector<int>> feature_counts) {
+    double gain = _entropy(classes_counts);
+    int sample_size =
+        accumulate(classes_counts.begin(), classes_counts.end(), 0);
 
-  void _train_batch(vector<vector<int>> batch) {}
+    for (int i = 0; i < feature_counts.size(); i++) {
+      double value_entropy = _entropy(feature_counts[i]);
+
+      gain -= (double)accumulate(feature_counts[i].begin(),
+                                 feature_counts[i].end(), 0) /
+              sample_size * value_entropy;
+    }
+
+    return gain;
+  }
+
+  pair<double, int> _get_highest_gain_feature(vector<bool> &visited) {
+    pair<double, int> highest_gain_feature = {-1, 0};
+
+    for (int i = 0; i < _values_counts.size(); i++) {
+      if (visited[i]) {
+        continue;
+      }
+
+      double gain = _gain(_classes_counts, _values_counts[i]);
+
+      if (gain > highest_gain_feature.first) {
+        highest_gain_feature = {gain, i};
+      }
+    }
+
+    return highest_gain_feature;
+  }
+
+  node _recurse(vector<vector<int>> sample, vector<bool> &visited) {
+    _calculate_counts(sample);
+
+    auto highest_gain_feature = _get_highest_gain_feature(visited);
+
+    node root;
+    root.feature = highest_gain_feature.second;
+    root.children =
+        vector<node>(_values_counts[highest_gain_feature.second].size());
+
+    if (highest_gain_feature.first <= 0) {
+      root.class_result = sample[0][0];
+      return root;
+    }
+
+    for (int i = 0; i < _values_counts[highest_gain_feature.second].size();
+         i++) {
+      visited[highest_gain_feature.second] = true;
+      root.children[i] = _recurse(
+          _get_feature_value_sample(sample, highest_gain_feature.second, i),
+          visited);
+      /* visited[highest_gain_feature.second] = false; */
+    }
+
+    return root;
+  }
+
+  void _build_decision_tree(vector<vector<int>> sample) {
+    vector<bool> visited(_values_counts.size(), false);
+
+    _root = _recurse(sample, visited);
+  }
+
+  int _predict(node n, vector<int> &data) {
+    if (n.class_result > -1) {
+      return n.class_result;
+    }
+
+    return _predict(n.children[data[n.feature + 1]], data);
+  }
+
+  double _predict_batch(vector<vector<int>> batch) {
+    int correct_count = 0;
+
+    for (auto &s : batch) {
+      if (s[0] == _predict(_root, s)) {
+        correct_count++;
+      }
+    }
+
+    return (double)correct_count / batch.size();
+  }
 
 public:
   decision_tree(string path) {
@@ -198,17 +316,15 @@ public:
                            min((i + 1), (int)prepared_data.size()),
                        prepared_data.end());
 
-      /* for (auto &batch : train_set) { */
-      /*   _train_batch(batch); */
-      /* } */
+      _build_decision_tree(_flatten(train_set));
 
-      /* double accuracy = _predict_batch(prepared_data[i]); */
+      double accuracy = _predict_batch(prepared_data[i]);
 
-      /* cout << "Set " << i + 1 << " Accuracy: " << accuracy << endl; */
+      cout << "Set " << i + 1 << " Accuracy: " << accuracy << endl;
 
-      /* overall_accuracy += accuracy; */
+      overall_accuracy += accuracy;
 
-      _init_probs();
+      _reset_counts();
     }
 
     cout << "Avg. Accuracy: " << overall_accuracy / _N_FOLD << endl;
@@ -216,9 +332,12 @@ public:
 };
 
 int main() {
+  cout << setprecision(2);
+
   try {
     auto dt = decision_tree("./breast-cancer.data");
 
+    dt.cross_validate();
   } catch (exception &e) {
     cout << e.what() << endl;
   }
