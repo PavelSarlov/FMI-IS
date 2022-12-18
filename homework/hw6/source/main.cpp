@@ -364,11 +364,11 @@ public:
   }
 };
 
-int main() {
+int main(int argc, char* argv[]) {
   cout << setprecision(2);
 
   try {
-    auto dt = decision_tree("./breast-cancer.data");
+    auto dt = decision_tree(argc > 1 ? argv[1] : "./breast-cancer.data");
 
     dt.cross_validate();
   } catch (exception &e) {
