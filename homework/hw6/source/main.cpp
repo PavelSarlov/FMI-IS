@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <numeric>
 #include <random>
@@ -46,8 +47,6 @@ class decision_tree {
   vector<vector<int>> _dataset;
   vector<int> _classes_counts;
   vector<vector<vector<int>>> _values_counts;
-
-  node _root;
 
   template <typename T> T _flatten(vector<T> arr) {
     return accumulate(arr.begin(), arr.end(), T{}, [](auto &dest, auto &src) {
@@ -230,8 +229,19 @@ class decision_tree {
     return highest_gain_feature;
   }
 
-  node _recurse(vector<vector<int>> sample, vector<bool> &visited) {
+  node _recurse(vector<vector<int>> sample, vector<bool> &visited,
+                const int k = 0) {
     _calculate_counts(sample);
+
+    if (sample.size() < k) {
+      node root;
+      root.feature = -1;
+      root.class_result =
+          distance(_classes_counts.begin(),
+                   max_element(_classes_counts.begin(), _classes_counts.end()));
+
+      return root;
+    }
 
     auto highest_gain_feature = _get_highest_gain_feature(visited);
 
@@ -245,22 +255,22 @@ class decision_tree {
       return root;
     }
 
+    visited[highest_gain_feature.second] = true;
+
     for (int i = 0; i < _values_counts[highest_gain_feature.second].size();
          i++) {
-      visited[highest_gain_feature.second] = true;
       root.children[i] = _recurse(
           _get_feature_value_sample(sample, highest_gain_feature.second, i),
           visited);
-      /* visited[highest_gain_feature.second] = false; */
     }
 
     return root;
   }
 
-  void _build_decision_tree(vector<vector<int>> sample) {
+  node _build_decision_tree(vector<vector<int>> sample, const int k = 0) {
     vector<bool> visited(_values_counts.size(), false);
 
-    _root = _recurse(sample, visited);
+    return _recurse(sample, visited, k);
   }
 
   int _predict(node n, vector<int> &data) {
@@ -271,11 +281,25 @@ class decision_tree {
     return _predict(n.children[data[n.feature + 1]], data);
   }
 
-  double _predict_batch(vector<vector<int>> batch) {
+  double _predict_batch(vector<vector<int>> batch, node root,
+                        vector<node> random_forest = {}) {
     int correct_count = 0;
 
     for (auto &s : batch) {
-      if (s[0] == _predict(_root, s)) {
+      if (!random_forest.empty()) {
+        vector<int> classes_counts(_class_to_idx.size());
+
+        for (auto &n : random_forest) {
+          classes_counts[_predict(n, s)]++;
+        }
+
+        if (s[0] == distance(classes_counts.begin(),
+                             max_element(classes_counts.begin(),
+                                         classes_counts.end()))) {
+          correct_count++;
+        }
+
+      } else if (s[0] == _predict(root, s)) {
         correct_count++;
       }
     }
@@ -303,7 +327,8 @@ public:
   }
 
   void cross_validate() {
-    double overall_accuracy = 0;
+    double overall_accuracy_k = 0;
+    double overall_accuracy_rf = 0;
 
     vector<vector<vector<int>>> prepared_data = _prepare_data();
 
@@ -316,18 +341,26 @@ public:
                            min((i + 1), (int)prepared_data.size()),
                        prepared_data.end());
 
-      _build_decision_tree(_flatten(train_set));
+      node root = _build_decision_tree(_flatten(train_set), 10);
 
-      double accuracy = _predict_batch(prepared_data[i]);
+      vector<node> random_forest(train_set.size());
+      for (int j = 0; j < train_set.size(); j++) {
+        random_forest[j] = _build_decision_tree(train_set[j]);
+      }
 
-      cout << "Set " << i + 1 << " Accuracy: " << accuracy << endl;
+      double accuracy_k = _predict_batch(prepared_data[i], root);
+      double accuracy_rf =
+          _predict_batch(prepared_data[i], root, random_forest);
 
-      overall_accuracy += accuracy;
+      cout << "Set " << i + 1 << " Accuracy: K -> " << accuracy_k << "; RF -> "
+           << accuracy_rf << endl;
 
-      _reset_counts();
+      overall_accuracy_k += accuracy_k;
+      overall_accuracy_rf += accuracy_rf;
     }
 
-    cout << "Avg. Accuracy: " << overall_accuracy / _N_FOLD << endl;
+    cout << "Avg. Accuracy: K -> " << overall_accuracy_k / _N_FOLD << "; RF -> "
+         << overall_accuracy_rf / _N_FOLD << endl;
   }
 };
 
