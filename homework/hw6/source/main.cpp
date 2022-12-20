@@ -37,6 +37,8 @@ class decision_tree {
   };
 
   const int _N_FOLD = 10;
+  const int _K = 10;
+  const int _RF_SIZE = 5;
 
   map<string, int> _class_to_idx;
   map<int, string> _idx_to_class;
@@ -255,13 +257,15 @@ class decision_tree {
       return root;
     }
 
-    visited[highest_gain_feature.second] = true;
-
     for (int i = 0; i < _values_counts[highest_gain_feature.second].size();
          i++) {
+      visited[highest_gain_feature.second] = true;
+
       root.children[i] = _recurse(
           _get_feature_value_sample(sample, highest_gain_feature.second, i),
           visited);
+
+      visited[highest_gain_feature.second] = false;
     }
 
     return root;
@@ -307,6 +311,27 @@ class decision_tree {
     return (double)correct_count / batch.size();
   }
 
+  vector<node> _build_random_forest(vector<vector<int>> sample) {
+    const unsigned seed =
+        chrono::system_clock::now().time_since_epoch().count();
+
+    shuffle(sample.begin(), sample.end(), default_random_engine(seed));
+
+    int offset = sample.size() / _RF_SIZE;
+
+    vector<node> random_forest(_RF_SIZE);
+
+    for (int i = 0; i < _RF_SIZE; i++) {
+      vector<vector<int>> current_sample(
+          sample.begin() + i * offset,
+          sample.begin() + min((i + 1) * offset, (int)sample.size()));
+
+      random_forest[i] = _build_decision_tree(current_sample);
+    }
+
+    return random_forest;
+  }
+
 public:
   decision_tree(string path) {
     ifstream file(path);
@@ -341,16 +366,11 @@ public:
                            min((i + 1), (int)prepared_data.size()),
                        prepared_data.end());
 
-      node root = _build_decision_tree(_flatten(train_set), 10);
-
-      vector<node> random_forest(train_set.size());
-      for (int j = 0; j < train_set.size(); j++) {
-        random_forest[j] = _build_decision_tree(train_set[j]);
-      }
+      node root = _build_decision_tree(_flatten(train_set), _K);
+      vector<node> rf = _build_random_forest(_flatten(train_set));
 
       double accuracy_k = _predict_batch(prepared_data[i], root);
-      double accuracy_rf =
-          _predict_batch(prepared_data[i], root, random_forest);
+      double accuracy_rf = _predict_batch(prepared_data[i], root, rf);
 
       cout << "Set " << i + 1 << " Accuracy: K -> " << accuracy_k << "; RF -> "
            << accuracy_rf << endl;
@@ -364,7 +384,7 @@ public:
   }
 };
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   cout << setprecision(2);
 
   try {

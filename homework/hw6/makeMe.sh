@@ -23,7 +23,7 @@ if [[ $1 =~ ccls ]]; then
 fi
 
 OUT="target/$(pwd | sed -E 's/ /\\ /g' | xargs basename).exe"
-CC="$(which g++.exe)"
+CC="$(which g++)"
 FLAGS="-O2\
     -g\
     -Wall\
