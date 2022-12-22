@@ -391,6 +391,8 @@ int main(int argc, char *argv[]) {
     auto dt = decision_tree(argc > 1 ? argv[1] : "./breast-cancer.data");
 
     dt.cross_validate();
+
+    system("pause");
   } catch (exception &e) {
     cout << e.what() << endl;
   }
