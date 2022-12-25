@@ -3,7 +3,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const chart_js_1 = require("chart.js");
 chart_js_1.Chart.register(...chart_js_1.registerables);
-const MAX_ITER = 25;
 const COLORS = [
     'Red',
     'Blue',
@@ -11,28 +10,60 @@ const COLORS = [
     'Purple',
     'Black',
     'Orange',
-    'Yellow',
+    'Coral',
     'Brown',
 ];
+const less = (best, curr) => best > curr;
+const greater = (best, curr) => best < curr;
 const chartTypes = [
-    'totalIntraClusterScatter',
-    // 'totalInterClusterScatter',
-    // 'combined',
+    {
+        evalFunc: 'totalIntraClusterScatter',
+        compFunc: less,
+        name: 'intra',
+    },
+    {
+        evalFunc: 'totalInterClusterScatter',
+        compFunc: greater,
+        name: 'inter',
+    },
+    {
+        evalFunc: 'totalCombined',
+        compFunc: greater,
+        name: 'combined',
+    },
+    {
+        evalFunc: 'totalIntraClusterScatter',
+        compFunc: less,
+        initFunc: 'initCentroidsPP',
+        name: 'intra-kmeansPP',
+    },
+    {
+        evalFunc: 'totalInterClusterScatter',
+        compFunc: greater,
+        initFunc: 'initCentroidsPP',
+        name: 'inter-kmeansPP',
+    },
+    {
+        evalFunc: 'totalCombined',
+        compFunc: greater,
+        initFunc: 'initCentroidsPP',
+        name: 'combined-kmeansPP',
+    },
 ];
+let charts = Array(chartTypes.length);
+let intervals = [];
 const chartConfig = ({ title }) => ({
     type: 'scatter',
     data: {
         datasets: [],
     },
     options: {
+        animation: false,
         elements: {
             point: {
                 radius: 5,
                 borderWidth: 0,
             },
-        },
-        animation: {
-            duration: 0,
         },
         scales: {
             y: {
@@ -54,11 +85,16 @@ const chartConfig = ({ title }) => ({
     },
 });
 class KMeans {
+    MAX_ITER = 100;
+    MAX_RESTARTS = 100;
     data = [];
     centroids = [];
     clusters = [];
-    prevClusterLengths = [];
+    prevCentroids = [];
     chart;
+    randomIndex(length) {
+        return Math.floor(Math.random() * length);
+    }
     norm(point) {
         return Math.sqrt(point.x ** 2 + point.y ** 2);
     }
@@ -72,27 +108,95 @@ class KMeans {
     distance(p1, p2) {
         return this.norm({ x: p1.x - p2.x, y: p1.y - p2.y });
     }
+    squaredDistance(p1, p2) {
+        return Math.pow(this.distance(p1, p2), 2);
+    }
     initCentroids(k) {
         const chosen = new Set();
         this.centroids = new Array(k);
         for (let i = 0; i < k; i++) {
-            let index = Math.floor(Math.random() * this.data.length);
+            let index = this.randomIndex(this.data.length);
             while (chosen.has(index)) {
-                index = Math.floor(Math.random() * this.data.length);
+                index = this.randomIndex(this.data.length);
             }
+            this.centroids[i] = this.data[index];
+            chosen.add(index);
+        }
+    }
+    initCentroidsPP(k) {
+        const chosen = new Set();
+        this.centroids = new Array(k);
+        this.centroids[0] = this.data[this.randomIndex(this.data.length)];
+        for (let i = 1; i < k; i++) {
+            const distances = this.data
+                .map((point, index) => {
+                if (chosen.has(index))
+                    return { dist: 0, index };
+                let min = Number.MAX_SAFE_INTEGER;
+                for (let j = 0; j < i; j++) {
+                    const dist = this.distance(point, this.centroids[j]);
+                    min = Math.min(min, dist);
+                }
+                return { dist: min ?? 0, index };
+            })
+                .filter((_) => _.dist !== 0)
+                .sort((a, b) => b.dist - a.dist);
+            const sum = distances
+                .map((_) => _.dist)
+                .reduce((prev, curr) => prev + curr);
+            const distribution = distances
+                .map(({ dist, index }) => ({
+                prop: Math.ceil((dist / sum) * distances.length),
+                index,
+            }))
+                .map(({ prop, index }) => Array(prop).fill(index))
+                .flat();
+            const index = distribution[this.randomIndex(distribution.length)];
             this.centroids[i] = this.data[index];
             chosen.add(index);
         }
     }
     intraClusterScatter(index) {
         return this.clusters[index]
-            .map((point) => Math.pow(this.distance(point, this.centroids[index]), 2))
+            .map((point) => this.squaredDistance(point, this.centroids[index]))
             .reduce((prev, curr) => prev + curr);
     }
     totalIntraClusterScatter() {
-        return this.clusters
+        return (this.clusters
             .map((_, index) => this.intraClusterScatter(index))
-            .reduce((prev, curr) => prev + curr);
+            .reduce((prev, curr) => prev + curr) / this.clusters.length);
+    }
+    interClusterScatter(i1, i2) {
+        // const c1 = this.clusters[i1];
+        // const c2 = this.clusters[i2];
+        // return (
+        //   c1
+        //     .map((p2) => c2.map((p1) => this.squaredDistance(p1, p2)))
+        //     .flat()
+        //     .reduce((prev, curr) => prev + curr) /
+        //   (c1.length * c2.length)
+        // );
+        return ((this.clusters[i1]
+            .map((p1) => this.squaredDistance(p1, this.centroids[i1]))
+            .reduce((prev, curr) => prev + curr) +
+            this.clusters[i2]
+                .map((p1) => this.squaredDistance(p1, this.centroids[i1]))
+                .reduce((prev, curr) => prev + curr)) /
+            (this.clusters[i1].length + this.clusters[i2].length));
+    }
+    totalInterClusterScatter() {
+        return (this.clusters
+            .map((_, i1) => {
+            let sum = 0;
+            for (let i2 = i1 + 1; i2 < this.clusters.length; i2++) {
+                sum += this.interClusterScatter(i1, i2);
+            }
+            return sum;
+        })
+            .reduce((prev, curr) => prev + curr) / this.centroids.length);
+    }
+    totalCombined() {
+        return Math.abs(this.totalInterClusterScatter() - this.totalIntraClusterScatter());
     }
     updateClusters() {
         this.clusters = new Array(this.centroids.length).fill(null).map((_) => []);
@@ -113,18 +217,19 @@ class KMeans {
     updateChart() {
         if (this.chart) {
             this.chart.data.datasets = this.clusters.map((cluster, index) => ({
-                label: `Cluster ${index}`,
+                label: `Cluster ${index + 1}`,
                 data: cluster,
                 pointBackgroundColor: COLORS[index],
             }));
             this.chart.update();
         }
     }
-    reachedLocalMaxima() {
-        return this.clusters.every((cluster, index) => this.prevClusterLengths[index] === cluster.length);
+    reachedLocalExtrema() {
+        return this.centroids.every((centroid, index) => this.prevCentroids[index].x === centroid.x &&
+            this.prevCentroids[index].y === centroid.y);
     }
-    restart(clusters) {
-        this.initCentroids(clusters);
+    restart(clusters, init) {
+        init(clusters);
         this.updateClusters();
     }
     constructor(data, chart) {
@@ -144,49 +249,64 @@ class KMeans {
             }
         }
     }
-    async clusterize(clusters, evaluation) {
-        let restarts = 20;
+    async clusterize(clusters, { name, compare, evaluation, init = this.initCentroids.bind(this), }) {
+        let restarts = this.MAX_RESTARTS;
         let bestSoFar = null;
-        while (restarts-- > 0) {
-            this.restart(clusters);
-            let iter = MAX_ITER;
-            while (iter-- > 0) {
-                console.log(`Iteration: ${MAX_ITER - iter}`);
-                this.updateCentroids();
-                this.updateClusters();
-                if (this.reachedLocalMaxima()) {
-                    console.log('Reached local maxima');
-                    break;
+        intervals.push(setInterval(async () => {
+            if (restarts-- > 0) {
+                this.restart(clusters, init.bind(this));
+                let iter = this.MAX_ITER;
+                while (iter-- > 0) {
+                    this.prevCentroids = this.centroids;
+                    this.updateCentroids();
+                    this.updateClusters();
+                    if (this.reachedLocalExtrema()) {
+                        break;
+                    }
                 }
-                this.prevClusterLengths = this.clusters.map((cluster) => cluster.length);
+                const current = evaluation();
+                if (!bestSoFar || compare(bestSoFar, current)) {
+                    bestSoFar = current;
+                    this.updateChart();
+                }
+                console.log(`${name} => Current: ${current} | Best: ${bestSoFar}`);
             }
-            const current = evaluation();
-            if (!bestSoFar || bestSoFar > current) {
-                bestSoFar = current;
-                this.updateChart();
-            }
-            console.log(`Current: ${current} | Best: ${bestSoFar}`);
-        }
+        }));
     }
 }
-let kMeans = new KMeans();
 document.getElementById('file')?.addEventListener('change', (event) => {
     document.getElementById('fileName').innerHTML =
         event.target.files[0]?.name ?? 'No dataset';
 });
 document.getElementById('data')?.addEventListener('submit', (event) => {
     event.preventDefault();
+    const wrapper = document.getElementsByClassName('charts-wrapper')[0];
+    wrapper.innerHTML = '';
     const file = document.getElementById('file').files?.[0];
     if (!file) {
         throw 'missing dataset';
     }
     const clusters = Number(document.getElementById('clusters').value);
+    intervals.forEach((interval) => clearInterval(interval));
+    intervals = [];
     let reader = new FileReader();
     reader.onload = async () => {
-        chartTypes.forEach(async (type) => {
-            const chart = new chart_js_1.Chart(document.getElementById(`chart-${type}`), chartConfig({ title: `${file.name.split('.')[0]}-${type}` }));
-            kMeans = new KMeans(reader.result, chart);
-            await kMeans.clusterize(clusters, kMeans[type].bind(kMeans));
+        chartTypes.forEach(async (type, index) => {
+            if (charts[index]) {
+                charts[index].destroy();
+            }
+            const chartElement = document.createElement('div');
+            chartElement.classList.add('chart');
+            chartElement.innerHTML = `<canvas id="chart-${type.name}"></canvas>`;
+            wrapper.appendChild(chartElement);
+            charts[index] = new chart_js_1.Chart(chartElement.querySelector(`#chart-${type.name}`), chartConfig({ title: `${file.name.split('.')[0]}-${type.name}` }));
+            const kMeans = new KMeans(reader.result, charts[index]);
+            kMeans.clusterize(clusters, {
+                name: type.name,
+                compare: type.compFunc,
+                evaluation: kMeans[type.evalFunc]?.bind(kMeans),
+                init: kMeans[type.initFunc]?.bind(kMeans),
+            });
         });
     };
     reader.readAsText(file, 'utf8');

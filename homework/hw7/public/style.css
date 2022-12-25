@@ -17,12 +17,19 @@ body {
   align-items: center;
 }
 
+.charts-wrapper {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
 .chart {
   display: flex;
   justify-content: center;
   align-items: center;
   width: 600px;
-  height: 600px;
+  height: auto;
 }
 
 .button {
