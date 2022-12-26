@@ -8,7 +8,7 @@ const COLORS = [
     'Blue',
     'Green',
     'Purple',
-    'Black',
+    'DarkGreen',
     'Orange',
     'Coral',
     'Brown',
@@ -256,11 +256,18 @@ class KMeans {
         this.centroids = this.centroids.map((_, index) => this.mean(this.clusters[index]));
     }
     updateChart() {
+        const updateContext = (context, last, rest) => {
+            const dataIndex = context.dataIndex;
+            const data = context.dataset.data;
+            return dataIndex === data.length - 1 ? last : rest;
+        };
         if (this.chart) {
             this.chart.data.datasets = this.clusters.map((cluster, index) => ({
                 label: `Cluster ${index + 1}`,
                 data: cluster,
-                pointBackgroundColor: COLORS[index],
+                pointBackgroundColor: (context) => updateContext(context, 'Black', COLORS[index]),
+                pointBorderColor: (context) => updateContext(context, 'White', COLORS[index]),
+                pointBorderWidth: (context) => updateContext(context, 2, 0),
             }));
             this.chart.update();
         }
