@@ -85,7 +85,7 @@ const chartConfig = ({ title }) => ({
     },
 });
 class KMeans {
-    MAX_ITER = 100;
+    MAX_ITER = 25;
     MAX_RESTARTS = 100;
     data = [];
     centroids = [];
@@ -107,9 +107,6 @@ class KMeans {
     }
     distance(p1, p2) {
         return this.norm({ x: p1.x - p2.x, y: p1.y - p2.y });
-    }
-    squaredDistance(p1, p2) {
-        return Math.pow(this.distance(p1, p2), 2);
     }
     initCentroids(k) {
         const chosen = new Set();
@@ -134,13 +131,11 @@ class KMeans {
                     return { dist: 0, index };
                 let min = Number.MAX_SAFE_INTEGER;
                 for (let j = 0; j < i; j++) {
-                    const dist = this.distance(point, this.centroids[j]);
-                    min = Math.min(min, dist);
+                    min = Math.min(min, this.distance(point, this.centroids[j]) ** 2);
                 }
                 return { dist: min ?? 0, index };
             })
-                .filter((_) => _.dist !== 0)
-                .sort((a, b) => b.dist - a.dist);
+                .filter((_) => _.dist !== 0);
             const sum = distances
                 .map((_) => _.dist)
                 .reduce((prev, curr) => prev + curr);
@@ -157,9 +152,32 @@ class KMeans {
         }
     }
     intraClusterScatter(index) {
-        return this.clusters[index]
-            .map((point) => this.squaredDistance(point, this.centroids[index]))
-            .reduce((prev, curr) => prev + curr);
+        // average diameter distance
+        //
+        return (this.clusters[index]
+            .map((p1, i) => [
+            ...this.clusters[index].slice(0, i),
+            ...this.clusters[index].slice(i + 1),
+        ]
+            .map((p2) => this.distance(p1, p2))
+            .reduce((prev, curr) => prev + curr, 0))
+            .reduce((prev, curr) => prev + curr, 0) /
+            (this.clusters[index].length * (this.clusters[index].length - 1)));
+        // complete diameter distance
+        //
+        // return Math.max(
+        //   ...this.clusters[index]
+        //     .map((p1, i) =>
+        //       Math.max(
+        //         ...this.clusters[index]
+        //           .slice(i + 1)
+        //           .map((p2) => this.distance(p1, p2)),
+        //         0
+        //       )
+        //     )
+        //     .flat(),
+        //   0
+        // );
     }
     totalIntraClusterScatter() {
         return (this.clusters
@@ -167,36 +185,59 @@ class KMeans {
             .reduce((prev, curr) => prev + curr) / this.clusters.length);
     }
     interClusterScatter(i1, i2) {
-        // const c1 = this.clusters[i1];
-        // const c2 = this.clusters[i2];
+        // average linkage distance
+        //
         // return (
-        //   c1
-        //     .map((p2) => c2.map((p1) => this.squaredDistance(p1, p2)))
-        //     .flat()
+        //   this.clusters[i1]
+        //     .map((p1) =>
+        //       this.clusters[i2]
+        //         .map((p2) => this.distance(p1, p2))
+        //         .reduce((prev, curr) => prev + curr)
+        //     )
         //     .reduce((prev, curr) => prev + curr) /
-        //   (c1.length * c2.length)
+        //   (this.clusters[i1].length * this.clusters[i2].length)
         // );
+        // single linkage distance
+        //
+        // return Math.min(
+        //   ...this.clusters[i1].map((p1) =>
+        //     Math.min(...this.clusters[i2].map((p2) => this.distance(p1, p2)))
+        //   )
+        // );
+        // average centroid linkage distance
+        //
         return ((this.clusters[i1]
-            .map((p1) => this.squaredDistance(p1, this.centroids[i1]))
+            .map((p1) => this.distance(p1, this.centroids[i1]))
             .reduce((prev, curr) => prev + curr) +
             this.clusters[i2]
-                .map((p1) => this.squaredDistance(p1, this.centroids[i1]))
+                .map((p1) => this.distance(p1, this.centroids[i1]))
                 .reduce((prev, curr) => prev + curr)) /
             (this.clusters[i1].length + this.clusters[i2].length));
     }
     totalInterClusterScatter() {
         return (this.clusters
             .map((_, i1) => {
-            let sum = 0;
-            for (let i2 = i1 + 1; i2 < this.clusters.length; i2++) {
-                sum += this.interClusterScatter(i1, i2);
-            }
-            return sum;
+            return this.clusters
+                .slice(i1 + 1)
+                .map((_, i2) => this.interClusterScatter(i1, i2))
+                .reduce((prev, curr) => prev + curr, 0);
         })
             .reduce((prev, curr) => prev + curr) / this.centroids.length);
     }
     totalCombined() {
-        return Math.abs(this.totalInterClusterScatter() - this.totalIntraClusterScatter());
+        // Dunn Index
+        //
+        const minInter = Math.min(...this.clusters
+            .map((_, i1) => {
+            let scatters = [];
+            for (let i2 = i1 + 1; i2 < this.clusters.length; i2++) {
+                scatters.push(this.interClusterScatter(i1, i2));
+            }
+            return scatters;
+        })
+            .flat());
+        const maxIntra = Math.max(...this.clusters.map((_, i) => this.intraClusterScatter(i)));
+        return minInter / maxIntra;
     }
     updateClusters() {
         this.clusters = new Array(this.centroids.length).fill(null).map((_) => []);
@@ -249,10 +290,10 @@ class KMeans {
             }
         }
     }
-    async clusterize(clusters, { name, compare, evaluation, init = this.initCentroids.bind(this), }) {
+    clusterize(clusters, { name, compare, evaluation, init = this.initCentroids.bind(this), }) {
         let restarts = this.MAX_RESTARTS;
         let bestSoFar = null;
-        intervals.push(setInterval(async () => {
+        intervals.push(setInterval(() => {
             if (restarts-- > 0) {
                 this.restart(clusters, init.bind(this));
                 let iter = this.MAX_ITER;
@@ -290,8 +331,8 @@ document.getElementById('data')?.addEventListener('submit', (event) => {
     intervals.forEach((interval) => clearInterval(interval));
     intervals = [];
     let reader = new FileReader();
-    reader.onload = async () => {
-        chartTypes.forEach(async (type, index) => {
+    reader.onload = () => {
+        chartTypes.forEach((type, index) => {
             if (charts[index]) {
                 charts[index].destroy();
             }

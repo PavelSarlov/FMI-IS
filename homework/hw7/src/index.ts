@@ -109,7 +109,7 @@ type KMeansConfig = {
 };
 
 class KMeans {
-  private MAX_ITER = 100;
+  private MAX_ITER = 25;
   private MAX_RESTARTS = 100;
 
   private data: Point[] = [];
@@ -136,10 +136,6 @@ class KMeans {
 
   private distance(p1: Point, p2: Point) {
     return this.norm({ x: p1.x - p2.x, y: p1.y - p2.y });
-  }
-
-  private squaredDistance(p1: Point, p2: Point) {
-    return Math.pow(this.distance(p1, p2), 2);
   }
 
   private initCentroids(k: number) {
@@ -170,13 +166,11 @@ class KMeans {
 
           let min = Number.MAX_SAFE_INTEGER;
           for (let j = 0; j < i; j++) {
-            const dist = this.distance(point, this.centroids[j]);
-            min = Math.min(min, dist);
+            min = Math.min(min, this.distance(point, this.centroids[j]) ** 2);
           }
           return { dist: min ?? 0, index };
         })
-        .filter((_) => _.dist !== 0)
-        .sort((a, b) => b.dist - a.dist);
+        .filter((_) => _.dist !== 0);
 
       const sum = distances
         .map((_) => _.dist)
@@ -197,9 +191,37 @@ class KMeans {
   }
 
   private intraClusterScatter(index: number) {
-    return this.clusters[index]
-      .map((point) => this.squaredDistance(point, this.centroids[index]))
-      .reduce((prev, curr) => prev + curr);
+    // average diameter distance
+    //
+    return (
+      this.clusters[index]
+        .map((p1, i) =>
+          [
+            ...this.clusters[index].slice(0, i),
+            ...this.clusters[index].slice(i + 1),
+          ]
+            .map((p2) => this.distance(p1, p2))
+            .reduce((prev, curr) => prev + curr, 0)
+        )
+        .reduce((prev, curr) => prev + curr, 0) /
+      (this.clusters[index].length * (this.clusters[index].length - 1))
+    );
+
+    // complete diameter distance
+    //
+    // return Math.max(
+    //   ...this.clusters[index]
+    //     .map((p1, i) =>
+    //       Math.max(
+    //         ...this.clusters[index]
+    //           .slice(i + 1)
+    //           .map((p2) => this.distance(p1, p2)),
+    //         0
+    //       )
+    //     )
+    //     .flat(),
+    //   0
+    // );
   }
 
   private totalIntraClusterScatter() {
@@ -211,23 +233,35 @@ class KMeans {
   }
 
   private interClusterScatter(i1: number, i2: number) {
-    // const c1 = this.clusters[i1];
-    // const c2 = this.clusters[i2];
-
+    // average linkage distance
+    //
     // return (
-    //   c1
-    //     .map((p2) => c2.map((p1) => this.squaredDistance(p1, p2)))
-    //     .flat()
+    //   this.clusters[i1]
+    //     .map((p1) =>
+    //       this.clusters[i2]
+    //         .map((p2) => this.distance(p1, p2))
+    //         .reduce((prev, curr) => prev + curr)
+    //     )
     //     .reduce((prev, curr) => prev + curr) /
-    //   (c1.length * c2.length)
+    //   (this.clusters[i1].length * this.clusters[i2].length)
     // );
 
+    // single linkage distance
+    //
+    // return Math.min(
+    //   ...this.clusters[i1].map((p1) =>
+    //     Math.min(...this.clusters[i2].map((p2) => this.distance(p1, p2)))
+    //   )
+    // );
+
+    // average centroid linkage distance
+    //
     return (
       (this.clusters[i1]
-        .map((p1) => this.squaredDistance(p1, this.centroids[i1]))
+        .map((p1) => this.distance(p1, this.centroids[i1]))
         .reduce((prev, curr) => prev + curr) +
         this.clusters[i2]
-          .map((p1) => this.squaredDistance(p1, this.centroids[i1]))
+          .map((p1) => this.distance(p1, this.centroids[i1]))
           .reduce((prev, curr) => prev + curr)) /
       (this.clusters[i1].length + this.clusters[i2].length)
     );
@@ -237,20 +271,35 @@ class KMeans {
     return (
       this.clusters
         .map((_, i1) => {
-          let sum = 0;
-          for (let i2 = i1 + 1; i2 < this.clusters.length; i2++) {
-            sum += this.interClusterScatter(i1, i2);
-          }
-          return sum;
+          return this.clusters
+            .slice(i1 + 1)
+            .map((_, i2) => this.interClusterScatter(i1, i2))
+            .reduce((prev, curr) => prev + curr, 0);
         })
         .reduce((prev, curr) => prev + curr) / this.centroids.length
     );
   }
 
   private totalCombined() {
-    return Math.abs(
-      this.totalInterClusterScatter() - this.totalIntraClusterScatter()
+    // Dunn Index
+    //
+    const minInter = Math.min(
+      ...this.clusters
+        .map((_, i1) => {
+          let scatters = [];
+          for (let i2 = i1 + 1; i2 < this.clusters.length; i2++) {
+            scatters.push(this.interClusterScatter(i1, i2));
+          }
+          return scatters;
+        })
+        .flat()
     );
+
+    const maxIntra = Math.max(
+      ...this.clusters.map((_, i) => this.intraClusterScatter(i))
+    );
+
+    return minInter / maxIntra;
   }
 
   private updateClusters() {
@@ -322,7 +371,7 @@ class KMeans {
     }
   }
 
-  async clusterize(
+  clusterize(
     clusters: number,
     {
       name,
@@ -335,7 +384,7 @@ class KMeans {
     let bestSoFar: number | null = null;
 
     intervals.push(
-      setInterval(async () => {
+      setInterval(() => {
         if (restarts-- > 0) {
           this.restart(clusters, init.bind(this));
 
@@ -393,8 +442,8 @@ document.getElementById('data')?.addEventListener('submit', (event: any) => {
   intervals = [];
 
   let reader = new FileReader();
-  reader.onload = async () => {
-    chartTypes.forEach(async (type, index) => {
+  reader.onload = () => {
+    chartTypes.forEach((type, index) => {
       if (charts[index]) {
         charts[index].destroy();
       }
