@@ -204,7 +204,7 @@ class KMeans {
             .reduce((prev, curr) => prev + curr, 0)
         )
         .reduce((prev, curr) => prev + curr, 0) /
-      (this.clusters[index].length * (this.clusters[index].length - 1))
+      (Math.max(this.clusters[index].length * (this.clusters[index].length - 1), 1))
     );
 
     // complete diameter distance
@@ -248,23 +248,23 @@ class KMeans {
 
     // single linkage distance
     //
-    return Math.min(
-      ...this.clusters[i1].map((p1) =>
-        Math.min(...this.clusters[i2].map((p2) => this.distance(p1, p2)))
-      )
-    );
+    // return Math.min(
+    //   ...this.clusters[i1].map((p1) =>
+    //     Math.min(...this.clusters[i2].map((p2) => this.distance(p1, p2)))
+    //   )
+    // );
 
     // average centroid linkage distance
     //
-    // return (
-    //   (this.clusters[i1]
-    //     .map((p1) => this.distance(p1, this.centroids[i1]))
-    //     .reduce((prev, curr) => prev + curr) +
-    //     this.clusters[i2]
-    //       .map((p1) => this.distance(p1, this.centroids[i1]))
-    //       .reduce((prev, curr) => prev + curr)) /
-    //   (this.clusters[i1].length + this.clusters[i2].length)
-    // );
+    return (
+      (this.clusters[i1]
+        .map((p1) => this.distance(p1, this.centroids[i1]))
+        .reduce((prev, curr) => prev + curr) +
+        this.clusters[i2]
+          .map((p1) => this.distance(p1, this.centroids[i1]))
+          .reduce((prev, curr) => prev + curr)) /
+      (this.clusters[i1].length + this.clusters[i2].length)
+    );
   }
 
   private totalInterClusterScatter() {
