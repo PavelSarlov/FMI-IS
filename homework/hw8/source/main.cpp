@@ -57,14 +57,24 @@ class SNN {
 
     Layer &operator=(const Layer &_other) {
       if (this != &_other) {
-        this->bias = _other.bias;
+        delete this->bias;
+
+        if (_other.bias) {
+          this->bias = new Neuron(*_other.bias);
+        }
         this->neurons = _other.neurons;
       }
       return *this;
     }
 
+    ~Layer() { delete this->bias; }
+
     friend ostream &operator<<(ostream &_os, const Layer &l) {
-      return _os << '{' << *l.bias << "; " << l.neurons << '}';
+      _os << '{';
+      if (l.bias) {
+        _os << *l.bias << "; ";
+      }
+      return _os << l.neurons << '}';
     }
   };
 
@@ -187,28 +197,13 @@ private:
 
     for (int i = _layers.size() - 1; i > 0; i--) {
       for (int k = 0; k < _layers[i].neurons.size(); k++) {
-        /* Neuron &front = _layers[i].neurons[k]; */
+        Neuron &front = _layers[i].neurons[k];
 
         for (int j = 0; j < _layers[i - 1].neurons.size(); j++) {
-          /* propagate(_layers[i - 1].neurons[j], front, i, k); */
-          /* Neuron &back = _layers[i - 1].neurons[j]; */
-
-          /* back[k].weight += */
-          /*     _learning_rate * */
-          /*     (i == _layers.size() - 1 ? front.gradient(expected[k]) */
-          /*                              : front.gradient(expected)) * */
-          /*     back.value; */
+          propagate(_layers[i - 1].neurons[j], front, i, k);
         }
 
-        /* propagate((*_layers[i].bias), front, i, k); */
-        /* Neuron &back = (*_layers[i].bias); */
-
-        /* back[k].weight += _learning_rate * */
-        /*                   (i == _layers.size() - 1 ?
-         * front.gradient(expected[k]) */
-        /*                                            :
-         * front.gradient(expected)) * */
-        /*                   back.value; */
+        propagate((*_layers[i].bias), front, i, k);
       }
     }
   }
@@ -223,7 +218,7 @@ private:
 public:
   SNN(int input_size, int hidden_size, int output_size,
       double learning_rate = 0.1, double bias = 1.,
-      int max_train_epochs = 50000, double min_error_condition = 0.001) {
+      int max_train_epochs = 100000, double min_error_condition = 0.001) {
     _max_train_epochs = max_train_epochs;
     _learning_rate = learning_rate;
     _min_error_condition = min_error_condition;
@@ -261,7 +256,7 @@ public:
         auto prediction = predict(train_input[i]);
 
         for (int j = 0; j < prediction.size(); j++) {
-          error += pow(prediction[j].value - train_output[i][j], 2) / 2.;
+          error += pow(prediction[j].value - train_output[i][j], 2);
         }
 
         _backpropagate(train_output[i]);
