@@ -217,8 +217,8 @@ private:
 
 public:
   SNN(int input_size, int hidden_size, int output_size,
-      double learning_rate = 0.1, double bias = 1.,
-      int max_train_epochs = 100000, double min_error_condition = 0.001) {
+      double learning_rate = 0.2, double bias = 1.,
+      int max_train_epochs = 50000, double min_error_condition = 0.001) {
     _max_train_epochs = max_train_epochs;
     _learning_rate = learning_rate;
     _min_error_condition = min_error_condition;
